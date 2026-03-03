@@ -1,0 +1,9 @@
+{
+  "faculty_data_clean.csv": {
+    "doc_id": "faculty_data_2024",
+    "title": "Faculty Information Database",
+    "date": "2024-03-03",
+    "applies_to": "all_faculty",
+    "document_type": "database"
+  }
+}

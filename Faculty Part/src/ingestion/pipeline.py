@@ -68,19 +68,42 @@ class IngestionPipeline:
         
         # Step 3: Generate embeddings and store
         stored_count = 0
-        for chunk in chunks:
-            # Generate embedding
-            embedding = self.embedding_model.embed(chunk.content)
-            
-            # Store in vector DB
-            self._store_chunk(chunk, embedding)
-            stored_count += 1
+        failed_chunks = []
+        
+        for i, chunk in enumerate(chunks):
+            try:
+                # Generate embedding
+                embedding = self.embedding_model.embed(chunk.content)
+                
+                # Store in vector DB
+                self._store_chunk(chunk, embedding)
+                stored_count += 1
+                
+                # Progress indicator
+                if (i + 1) % 10 == 0:
+                    print(f"  Processed {i + 1}/{len(chunks)} chunks...")
+                    
+            except Exception as e:
+                error_msg = str(e)[:200]
+                chunk_preview = chunk.content[:100].replace('\n', ' ')
+                print(f"  ⚠ Chunk {i+1} failed (len={len(chunk.content)}): {error_msg}")
+                print(f"     Preview: {chunk_preview}...")
+                failed_chunks.append({
+                    "index": i + 1,
+                    "length": len(chunk.content),
+                    "error": error_msg
+                })
+                continue
+        
+        if failed_chunks:
+            print(f"  ⚠ Failed to embed {len(failed_chunks)} chunks: {failed_chunks[:5]}...")
         
         return {
             "doc_id": doc_metadata.get("doc_id"),
             "file_path": str(file_path),
             "chunks_created": len(chunks),
             "chunks_stored": stored_count,
+            "chunks_failed": len(failed_chunks),
             "has_images": processed.get("images", []),
         }
     
@@ -110,7 +133,7 @@ class IngestionPipeline:
         # Process all supported files
         for file_path in directory.rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in [
-                '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md'
+                '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md', '.csv', '.xlsx', '.xls'
             ]:
                 # Get metadata for this file
                 doc_metadata = metadata_map.get(file_path.name, {
@@ -135,6 +158,11 @@ class IngestionPipeline:
     
     def _store_chunk(self, chunk, embedding: List[float]):
         """Store chunk with embedding in vector database."""
+        import hashlib
+        
+        # Convert string ID to integer hash for Qdrant
+        chunk_id_int = int(hashlib.md5(chunk.chunk_id.encode()).hexdigest()[:16], 16)
+        
         # Prepare payload
         payload = {
             "content": chunk.content,
@@ -142,6 +170,7 @@ class IngestionPipeline:
             "content_type": chunk.content_type.value,
             "token_count": chunk.token_count,
             "parent_doc_id": chunk.parent_doc_id,
+            "original_chunk_id": chunk.chunk_id,  # Keep original ID in payload
             **chunk.metadata,
         }
         
@@ -149,7 +178,7 @@ class IngestionPipeline:
         self.vector_db.upsert(
             collection_name=self.collection_name,
             points=[{
-                "id": chunk.chunk_id,
+                "id": chunk_id_int,
                 "vector": embedding,
                 "payload": payload,
             }]

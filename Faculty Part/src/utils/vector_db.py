@@ -49,7 +49,7 @@ class VectorDBClient:
     def create_collection(
         self,
         collection_name: str = None,
-        vector_size: int = 4096,  # Llama 2 embeddings
+        vector_size: int = 768,  # nomic-embed-text default
         distance: Distance = Distance.COSINE
     ):
         """
@@ -57,7 +57,7 @@ class VectorDBClient:
         
         Args:
             collection_name: Name of collection to create
-            vector_size: Dimension of vectors (4096 for Llama 2 7B)
+            vector_size: Dimension of vectors (768 for nomic-embed-text)
             distance: Distance metric (COSINE, EUCLID, DOT)
         """
         collection_name = collection_name or self.collection_name
@@ -131,13 +131,13 @@ class VectorDBClient:
         if query_filter:
             qdrant_filter = self._build_filter(query_filter)
         
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             query_filter=qdrant_filter,
             score_threshold=score_threshold
-        )
+        ).points
         
         return results
     
@@ -149,7 +149,6 @@ class VectorDBClient:
         
         return {
             "name": collection_name,
-            "vectors_count": info.vectors_count,
             "points_count": info.points_count,
             "status": info.status,
         }

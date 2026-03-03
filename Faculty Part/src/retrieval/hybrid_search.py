@@ -261,11 +261,16 @@ class HybridSearchEngine:
         
         conditions = []
         for key, value in filters.items():
+            # Skip None values - can't filter by None in Qdrant
+            if value is None:
+                continue
+                
             if isinstance(value, list):
                 for v in value:
-                    conditions.append(
-                        FieldCondition(key=key, match=MatchValue(value=v))
-                    )
+                    if v is not None:  # Skip None values in lists too
+                        conditions.append(
+                            FieldCondition(key=key, match=MatchValue(value=v))
+                        )
             else:
                 conditions.append(
                     FieldCondition(key=key, match=MatchValue(value=value))
@@ -276,8 +281,20 @@ class HybridSearchEngine:
     def _matches_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
         """Check if metadata matches filters."""
         for key, value in filters.items():
-            if metadata.get(key) != value:
-                return False
+            meta_value = metadata.get(key)
+            
+            # Handle None filter (checking for absence)
+            if value is None:
+                if meta_value is not None:
+                    return False
+            # Handle list filters (OR logic)
+            elif isinstance(value, list):
+                if meta_value not in value:
+                    return False
+            # Handle exact match
+            else:
+                if meta_value != value:
+                    return False
         return True
     
     def _fetch_all_chunks(self) -> List[Dict[str, Any]]:

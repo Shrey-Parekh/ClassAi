@@ -53,6 +53,10 @@ class DocumentProcessor:
             return self._process_image(file_path, doc_metadata)
         elif suffix in ['.txt', '.md']:
             return self._process_text(file_path, doc_metadata)
+        elif suffix == '.csv':
+            return self._process_csv(file_path, doc_metadata)
+        elif suffix in ['.xlsx', '.xls']:
+            return self._process_excel(file_path, doc_metadata)
         else:
             raise ValueError(f"Unsupported file type: {suffix}")
     
@@ -158,6 +162,108 @@ class DocumentProcessor:
         return {
             "content": content,
             "metadata": doc_metadata,
+        }
+    
+    def _process_csv(
+        self,
+        file_path: Path,
+        doc_metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Process CSV file into readable text format."""
+        import csv
+        
+        # Try different encodings
+        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+        
+        for encoding in encodings:
+            try:
+                with open(file_path, 'r', encoding=encoding) as f:
+                    reader = csv.DictReader(f)
+                    headers = reader.fieldnames
+                    rows = list(reader)
+                break
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        else:
+            raise ValueError(f"Could not decode {file_path.name} with any common encoding")
+        
+        # Convert to readable text format
+        content_parts = []
+        
+        # Add title
+        title = doc_metadata.get('title', file_path.stem)
+        content_parts.append(f"{title}\n")
+        content_parts.append("=" * len(title) + "\n\n")
+        
+        # Add each row as a structured entry
+        for i, row in enumerate(rows, 1):
+            content_parts.append(f"Entry {i}:\n")
+            for key, value in row.items():
+                if value:  # Only include non-empty values
+                    content_parts.append(f"  {key}: {value}\n")
+            content_parts.append("\n")
+        
+        content = "".join(content_parts)
+        
+        return {
+            "content": content,
+            "metadata": {
+                **doc_metadata,
+                "row_count": len(rows),
+                "columns": list(headers) if headers else [],
+            }
+        }
+    
+    def _process_excel(
+        self,
+        file_path: Path,
+        doc_metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Process Excel file into readable text format."""
+        try:
+            import openpyxl
+        except ImportError:
+            raise ImportError("openpyxl required for Excel files. Install: pip install openpyxl")
+        
+        workbook = openpyxl.load_workbook(file_path, data_only=True)
+        sheet = workbook.active
+        
+        # Get headers from first row
+        headers = [cell.value for cell in sheet[1]]
+        
+        # Get all rows
+        rows = []
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            if any(cell is not None for cell in row):  # Skip empty rows
+                row_dict = dict(zip(headers, row))
+                rows.append(row_dict)
+        
+        # Convert to readable text format
+        content_parts = []
+        
+        # Add title
+        title = doc_metadata.get('title', file_path.stem)
+        content_parts.append(f"{title}\n")
+        content_parts.append("=" * len(title) + "\n\n")
+        
+        # Add each row as a structured entry
+        for i, row in enumerate(rows, 1):
+            content_parts.append(f"Entry {i}:\n")
+            for key, value in row.items():
+                if value is not None and str(value).strip():  # Only include non-empty values
+                    content_parts.append(f"  {key}: {value}\n")
+            content_parts.append("\n")
+        
+        content = "".join(content_parts)
+        
+        return {
+            "content": content,
+            "metadata": {
+                **doc_metadata,
+                "row_count": len(rows),
+                "columns": headers,
+                "sheet_name": sheet.title,
+            }
         }
     
     def _ocr_pdf_page(self, page) -> str:

@@ -3,36 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClassAI Faculty Assistant</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Faculty Assistant · ClassAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Warm humanist body font, close in feel to Söhne -->
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>ClassAI Faculty Assistant</h1>
-            <p>Ask questions about faculty policies and procedures</p>
-        </header>
+    <div class="app-root">
+        <!-- Left rail: conversations -->
+        <aside class="sidebar">
+            <div class="sidebar-inner">
+                <div class="sidebar-header">
+                    <div class="product-mark">
+                        <div class="product-initial">F</div>
+                        <div class="product-labels">
+                            <span class="product-name">College Assistant</span>
+                            <span class="product-meta">ClassAI</span>
+                        </div>
+                    </div>
+                </div>
 
-        <div class="chat-container">
-            <div id="messages" class="messages"></div>
-            
-            <div class="input-container">
-                <input 
-                    type="text" 
-                    id="userInput" 
-                    placeholder="Ask a question..."
-                    autocomplete="off"
-                >
-                <button id="sendBtn">Send</button>
+                <div class="sidebar-section sidebar-section--top">
+                    <button class="sidebar-new" onclick="startNewChat()">
+                        <span class="sidebar-new-icon">+</span>
+                        <span>New conversation</span>
+                    </button>
+                </div>
+
+                <div class="sidebar-section sidebar-section--history">
+                    <div class="sidebar-section-label">Recent</div>
+                    <div id="recentChats" class="sidebar-history-list">
+                        <div class="sidebar-history-empty">
+                            No saved conversations yet.
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
+        </aside>
 
-        <div class="status" id="status">
-            <span class="status-dot"></span>
-            <span id="statusText">Connecting...</span>
+        <div class="main-shell">
+            <header class="main-header">
+                <div class="model-id">
+                    <span class="model-name">Faculty RAG · Gemini</span>
+                </div>
+                <div class="connection">
+                    <span class="connection-dot" id="statusIndicator">
+                        <span class="connection-dot-inner"></span>
+                    </span>
+                    <span class="connection-label" id="statusText">Connecting…</span>
+                </div>
+            </header>
+
+            <main class="main-pane">
+                <div class="main-pane-inner">
+                    <section class="messages-frame" id="messagesContainer">
+                        <div class="conversation-column">
+                            <!-- Initial guidance surface -->
+                            <section class="welcome" id="welcomeScreen">
+                                <div class="welcome-heading">
+                                    <p class="welcome-eyebrow">Faculty knowledge, grounded in documents</p>
+                                    <p class="welcome-title">Ask clear, work-like questions.</p>
+                                    <p class="welcome-copy">
+                                        This workspace searches approved faculty policies, records and datasets.
+                                        Answers are constrained to what the system can cite.
+                                    </p>
+                                </div>
+
+                                <div class="welcome-grid">
+                                    <div class="welcome-group">
+                                        <div class="welcome-label">Policy and process</div>
+                                        <button class="prompt-card" type="button" onclick="sendSuggestion('How do I apply for casual leave as teaching faculty?')">
+                                            How do I apply for casual leave as teaching faculty?
+                                        </button>
+                                        <button class="prompt-card" type="button" onclick="sendSuggestion('What is the approval workflow for international conference travel?')">
+                                            What is the approval workflow for international conference travel?
+                                        </button>
+                                    </div>
+                                    <div class="welcome-group">
+                                        <div class="welcome-label">People and expertise</div>
+                                        <button class="prompt-card" type="button" onclick="sendSuggestion('Who are the faculty working on machine learning and data science?')">
+                                            Who are the faculty working on machine learning and data science?
+                                        </button>
+                                        <button class="prompt-card" type="button" onclick="sendSuggestion('Show me faculty with publications in renewable energy in the last 3 years.')">
+                                            Show me faculty with publications in renewable energy in the last 3 years.
+                                        </button>
+                                    </div>
+                                </div>
+                            </section>
+
+                            <!-- Streaming conversation -->
+                            <section class="messages-thread" aria-label="Conversation">
+                                <div id="messages"></div>
+                            </section>
+                        </div>
+                    </section>
+                </div>
+            </main>
+
+            <footer class="composer-shell">
+                <div class="composer">
+                    <textarea
+                        id="userInput"
+                        class="composer-input"
+                        rows="1"
+                        placeholder="Ask about a faculty policy, eligibility rule, or person—without including any personal identifiers."
+                    ></textarea>
+                    <button id="sendBtn" class="composer-send" type="button" aria-label="Send message">
+                        <span class="composer-send-icon">↩</span>
+                    </button>
+                </div>
+                <div class="composer-meta">
+                    <span>Enter to send · Shift + Enter for new line</span>
+                </div>
+            </footer>
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="/static/script.js"></script>
 </body>
 </html>

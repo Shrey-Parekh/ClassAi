@@ -3,11 +3,10 @@ Complete retrieval pipeline orchestrating all components.
 """
 
 from typing import Dict, Any, List
-from config.chunking_config import TOP_K_INITIAL, TOP_K_RERANKED
+from config.chunking_config import TOP_K_RERANKED
 
 from .intent_classifier import IntentClassifier
 from .hybrid_search import HybridSearchEngine
-from .reranker import CrossEncoderReranker
 
 
 class RetrievalPipeline:
@@ -18,8 +17,7 @@ class RetrievalPipeline:
     1. Detect query intent
     2. Apply metadata filters
     3. Run hybrid search (vector + BM25)
-    4. Rerank with cross-encoder
-    5. Return top-k chunks
+    4. Return top-k chunks
     """
     
     def __init__(
@@ -41,7 +39,6 @@ class RetrievalPipeline:
             vector_db_client=vector_db_client,
             collection_name=collection_name
         )
-        self.reranker = CrossEncoderReranker()
         self.embedding_model = embedding_model
     
     def retrieve(
@@ -68,9 +65,10 @@ class RetrievalPipeline:
         # Step 2: Get metadata filters
         filters = self.intent_classifier.get_metadata_filters(query, intent)
         
-        # Add chunk level preference based on intent
-        target_levels = self.intent_classifier.get_target_levels(intent)
-        filters["chunk_level"] = [level.value for level in target_levels]
+        # Add chunk level preference based on intent (only for document-based chunks)
+        # Skip for CSV/Excel data which doesn't have chunk levels
+        # target_levels = self.intent_classifier.get_target_levels(intent)
+        # filters["chunk_level"] = [level.value for level in target_levels]
         
         # Step 3: Generate query embedding
         query_embedding = self.embedding_model.embed(query)
@@ -79,15 +77,8 @@ class RetrievalPipeline:
         search_results = self.search_engine.search(
             query=query,
             query_embedding=query_embedding,
-            top_k=TOP_K_INITIAL,
+            top_k=top_k,  # Get final count directly
             filters=filters
-        )
-        
-        # Step 5: Rerank
-        reranked_results = self.reranker.rerank(
-            query=query,
-            results=search_results,
-            top_k=top_k
         )
         
         # Format results
@@ -95,17 +86,16 @@ class RetrievalPipeline:
             {
                 "chunk_id": result.chunk_id,
                 "content": result.content,
-                "score": result.relevance_score,
+                "score": result.score,
                 "metadata": result.metadata,
             }
-            for result in reranked_results
+            for result in search_results
         ]
         
         return {
             "chunks": chunks,
             "intent": intent.value,
             "metadata": {
-                "initial_results": len(search_results),
                 "final_results": len(chunks),
                 "filters_applied": filters,
             }

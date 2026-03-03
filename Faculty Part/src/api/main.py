@@ -6,6 +6,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from ..retrieval.pipeline import RetrievalPipeline
 from ..generation.answer_generator import AnswerGenerator
@@ -28,14 +36,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Serve static files
-from fastapi.staticfiles import StaticFiles
-from pathlib import Path
-
-frontend_path = Path(__file__).parent.parent.parent / "frontend"
-if frontend_path.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_path), html=True), name="frontend")
 
 
 # Request/Response models
@@ -147,6 +147,9 @@ async def query_faculty_resources(request: QueryRequest):
         )
     
     except Exception as e:
+        import traceback
+        print(f"Error processing query: {str(e)}")
+        print(traceback.format_exc())
         raise HTTPException(
             status_code=500,
             detail=f"Query processing failed: {str(e)}"
@@ -165,6 +168,20 @@ async def health_check():
     }
 
 
+# Serve frontend
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+frontend_path = Path(__file__).parent.parent.parent / "frontend"
+
+@app.get("/chat")
+async def serve_chat():
+    """Serve the chat interface."""
+    return FileResponse(str(frontend_path / "index.html"))
+
+app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8001)

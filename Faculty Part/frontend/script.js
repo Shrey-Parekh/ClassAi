@@ -1,56 +1,79 @@
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8001';
 
-const messagesContainer = document.getElementById('messages');
+const messagesContainer = document.getElementById('messagesContainer');
+const messages = document.getElementById('messages');
 const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
-const statusElement = document.getElementById('status');
+const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
+const welcomeScreen = document.getElementById('welcomeScreen');
+
+// Auto-resize textarea
+userInput.addEventListener('input', function() {
+    this.style.height = 'auto';
+    this.style.height = (this.scrollHeight) + 'px';
+});
 
 // Check API connection
 async function checkConnection() {
     try {
         const response = await fetch(`${API_URL}/health`);
         if (response.ok) {
-            statusElement.classList.add('connected');
+            statusIndicator.classList.add('connected');
             statusText.textContent = 'Connected';
             return true;
         }
     } catch (error) {
-        statusElement.classList.remove('connected');
-        statusText.textContent = 'API not available';
+        statusIndicator.classList.remove('connected');
+        statusText.textContent = 'Disconnected';
         return false;
     }
 }
 
 // Add message to chat
 function addMessage(content, isUser, sources = null) {
+    // Hide welcome screen on first message
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${isUser ? 'user' : 'assistant'}`;
     
+    const header = document.createElement('div');
+    header.className = 'message-header';
+    
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
-    avatar.textContent = isUser ? 'U' : 'AI';
+    avatar.textContent = isUser ? 'Y' : 'AI';
+    
+    const name = document.createElement('div');
+    name.className = 'message-name';
+    name.textContent = isUser ? 'You' : 'Faculty Assistant';
+    
+    header.appendChild(avatar);
+    header.appendChild(name);
     
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.textContent = content;
     
-    messageDiv.appendChild(avatar);
+    // Format content with markdown-like styling
+    const formattedContent = formatContent(content);
+    contentDiv.innerHTML = formattedContent;
+    
+    messageDiv.appendChild(header);
     messageDiv.appendChild(contentDiv);
     
     // Add sources if available
     if (sources && sources.length > 0) {
         const sourcesDiv = document.createElement('div');
         sourcesDiv.className = 'message-sources';
-        sourcesDiv.innerHTML = '<strong>Sources:</strong>';
+        sourcesDiv.innerHTML = '<strong>Sources</strong>';
         
         const sourcesList = document.createElement('ul');
         sources.forEach(source => {
             const li = document.createElement('li');
-            li.textContent = `• ${source.title}`;
-            if (source.date) {
-                li.textContent += ` (${source.date})`;
-            }
+            li.textContent = source.title || source.doc_id;
             sourcesList.appendChild(li);
         });
         
@@ -58,28 +81,58 @@ function addMessage(content, isUser, sources = null) {
         contentDiv.appendChild(sourcesDiv);
     }
     
-    messagesContainer.appendChild(messageDiv);
+    messages.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
     return messageDiv;
 }
 
+// Format content with basic markdown
+function formatContent(text) {
+    // Bold
+    text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    // Italic
+    text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // Line breaks
+    text = text.replace(/\n/g, '<br>');
+    // Lists
+    text = text.replace(/^- (.*?)$/gm, '<li>$1</li>');
+    if (text.includes('<li>')) {
+        text = text.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
+    }
+    return text;
+}
+
 // Add loading indicator
 function addLoadingMessage() {
+    if (welcomeScreen) {
+        welcomeScreen.style.display = 'none';
+    }
+
     const messageDiv = document.createElement('div');
     messageDiv.className = 'message assistant loading';
+    
+    const header = document.createElement('div');
+    header.className = 'message-header';
     
     const avatar = document.createElement('div');
     avatar.className = 'message-avatar';
     avatar.textContent = 'AI';
     
+    const name = document.createElement('div');
+    name.className = 'message-name';
+    name.textContent = 'Faculty Assistant';
+    
+    header.appendChild(avatar);
+    header.appendChild(name);
+    
     const contentDiv = document.createElement('div');
     contentDiv.className = 'message-content';
-    contentDiv.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div>';
+    contentDiv.innerHTML = '<div class="loading-dot"></div><div class="loading-dot"></div><div class="loading-dot"></div>';
     
-    messageDiv.appendChild(avatar);
+    messageDiv.appendChild(header);
     messageDiv.appendChild(contentDiv);
-    messagesContainer.appendChild(messageDiv);
+    messages.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
     return messageDiv;
@@ -113,7 +166,7 @@ async function sendQuery(query) {
         
     } catch (error) {
         loadingMessage.remove();
-        addMessage('Sorry, I encountered an error. Please make sure the API is running.', false);
+        addMessage('I apologize, but I encountered an error processing your request. Please make sure the API is running and try again.', false);
         console.error('Error:', error);
     } finally {
         sendBtn.disabled = false;
@@ -129,26 +182,39 @@ sendBtn.addEventListener('click', async () => {
     // Add user message
     addMessage(query, true);
     userInput.value = '';
+    userInput.style.height = 'auto';
     
     // Send to API
     await sendQuery(query);
 });
 
 // Handle Enter key
-userInput.addEventListener('keypress', (e) => {
+userInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendBtn.click();
     }
 });
 
+// Send suggestion
+function sendSuggestion(text) {
+    userInput.value = text;
+    sendBtn.click();
+}
+
+// Start new chat
+function startNewChat() {
+    messages.innerHTML = '';
+    welcomeScreen.style.display = 'block';
+    userInput.value = '';
+    userInput.focus();
+}
+
 // Initialize
 (async () => {
     const connected = await checkConnection();
-    if (connected) {
-        addMessage('Hello! I\'m your Faculty Assistant. Ask me anything about faculty policies, procedures, or guidelines.', false);
-    } else {
-        addMessage('Unable to connect to the API. Please make sure the backend is running on http://localhost:8000', false);
+    if (!connected) {
+        statusText.textContent = 'API not available';
     }
     userInput.focus();
 })();
