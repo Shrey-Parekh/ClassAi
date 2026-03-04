@@ -33,11 +33,11 @@ class ChunkPreprocessor:
     
     # Token to character ratio (approximate)
     TOKENS_PER_CHAR = 0.25  # 1 token ≈ 4 characters
-    MIN_TOKENS = 20
-    MAX_TOKENS = 450  # Optimized for reranker safety (450 + 150 query = 600 < 512 typical)
+    MIN_TOKENS = 5  # Reduced to capture short but important information (form names, keywords)
+    MAX_TOKENS = 490  # Optimized for reranker safety (490 + 150 query = 640, safe margin)
     
-    MIN_CHARS = int(MIN_TOKENS / TOKENS_PER_CHAR)  # ~80 chars
-    MAX_CHARS = int(MAX_TOKENS / TOKENS_PER_CHAR)  # ~1800 chars
+    MIN_CHARS = int(MIN_TOKENS / TOKENS_PER_CHAR)  # ~20 chars
+    MAX_CHARS = int(MAX_TOKENS / TOKENS_PER_CHAR)  # ~1960 chars
     
     # Character replacements
     CHAR_REPLACEMENTS = {

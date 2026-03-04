@@ -139,7 +139,11 @@ async def query_faculty_resources(request: QueryRequest):
             sources=answer_result["sources"],
             intent=retrieval_result["intent"],
             chunks_used=answer_result["chunks_used"],
-            metadata=retrieval_result["metadata"]
+            metadata={
+                **retrieval_result["metadata"],
+                "domain": retrieval_result.get("domain", "general"),
+                "entities": retrieval_result.get("entities", [])
+            }
         )
     
     except Exception as e:

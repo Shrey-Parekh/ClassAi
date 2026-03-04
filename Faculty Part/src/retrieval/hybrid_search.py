@@ -63,43 +63,61 @@ class HybridSearchEngine:
     
     def search(
         self,
-        query: str,
+        original_query: str,
+        expanded_query: str,
         query_embedding: List[float],
         top_k: int = 20,
-        filters: Dict[str, Any] = None
+        filters: Dict[str, Any] = None,
+        name_embedding: List[float] = None,
+        name_boost: float = 0.0
     ) -> List[SearchResult]:
         """
         Perform hybrid search combining dense and sparse.
         
         Args:
-            query: Text query
-            query_embedding: Dense vector embedding
+            original_query: Original clean query (for sparse search)
+            expanded_query: Expanded query with keywords (for sparse search)
+            query_embedding: Dense vector embedding (from original query)
             top_k: Number of results to return
             filters: Metadata filters
+            name_embedding: Optional name-focused embedding for faculty queries
+            name_boost: Boost factor for name-based results (0.0-1.0)
         
         Returns:
             List of search results sorted by hybrid score
         """
-        # 1. Dense search
+        # 1. Dense search with original query embedding
         dense_results = self._dense_search(
             query_embedding,
             top_k=top_k * 2,
             filters=filters
         )
         
-        # 2. Sparse search (if encoder available)
+        # 2. Name-boosted search (if name embedding provided)
+        name_results = []
+        if name_embedding is not None and name_boost > 0:
+            name_results = self._dense_search(
+                name_embedding,
+                top_k=top_k,
+                filters=filters
+            )
+        
+        # 3. Sparse search using expanded query for keywords
         sparse_results = []
         if self.sparse_encoder:
+            # Use expanded query for better keyword coverage
             sparse_results = self._sparse_search(
-                query,
+                expanded_query,
                 top_k=top_k * 2,
                 filters=filters
             )
         
-        # 3. Fuse results
+        # 4. Fuse results
         fused_results = self._fuse_results(
             dense_results,
             sparse_results,
+            name_results,
+            name_boost,
             top_k=top_k
         )
         
@@ -147,7 +165,12 @@ class HybridSearchEngine:
         top_k: int,
         filters: Dict[str, Any] = None
     ) -> List[SearchResult]:
-        """Perform sparse vector search."""
+        """
+        Perform sparse vector search using expanded query for keywords.
+        
+        Note: Sparse search is currently not fully implemented in Qdrant client.
+        This is a placeholder that will be activated when Qdrant sparse vectors are available.
+        """
         try:
             if not self.sparse_encoder:
                 return []
@@ -163,47 +186,51 @@ class HybridSearchEngine:
             if filters and isinstance(filters, dict):
                 qdrant_filter = self._build_filter(filters)
             
-            # Query Qdrant with sparse vector
-            # Note: Qdrant sparse search API may vary by version
-            # This is a placeholder for the actual sparse search call
-            results = self.vector_db.search_sparse(
-                collection_name=self.collection_name,
-                query_vector=sparse_query,
-                limit=top_k,
-                query_filter=qdrant_filter
-            )
+            # NOTE: Qdrant sparse search is not yet available in the client
+            # This will be enabled when the API is ready
+            # For now, we rely on dense search only
+            self.logger.debug("Sparse search not available - using dense search only")
+            return []
             
-            return [
-                SearchResult(
-                    chunk_id=hit.id,
-                    content=hit.payload.get("content", ""),
-                    score=hit.score,
-                    metadata=hit.payload,
-                    source="sparse"
-                )
-                for hit in results
-            ]
-        
+            # Future implementation:
+            # results = self.vector_db.search_sparse(
+            #     collection_name=self.collection_name,
+            #     query_vector=sparse_query,
+            #     limit=top_k,
+            #     query_filter=qdrant_filter
+            # )
+            
         except Exception as e:
-            self.logger.warning(f"Sparse search not available or failed: {e}")
+            self.logger.debug(f"Sparse search not available: {e}")
             return []
     
     def _fuse_results(
         self,
         dense_results: List[SearchResult],
         sparse_results: List[SearchResult],
+        name_results: List[SearchResult],
+        name_boost: float,
         top_k: int
     ) -> List[SearchResult]:
         """
-        Fuse dense and sparse results using weighted scoring.
+        Fuse dense, sparse, and name-based results using weighted scoring.
+        
+        Args:
+            dense_results: Results from dense semantic search
+            sparse_results: Results from sparse keyword search
+            name_results: Results from name-focused search
+            name_boost: Boost factor for name matches
+            top_k: Number of final results to return
         """
         # Normalize scores
         dense_results = self._normalize_scores(dense_results)
         sparse_results = self._normalize_scores(sparse_results)
+        name_results = self._normalize_scores(name_results)
         
         # Combine results by chunk_id
         combined: Dict[str, SearchResult] = {}
         
+        # Add dense results (60% weight)
         for result in dense_results:
             combined[result.chunk_id] = SearchResult(
                 chunk_id=result.chunk_id,
@@ -213,6 +240,7 @@ class HybridSearchEngine:
                 source="hybrid"
             )
         
+        # Add sparse results (40% weight)
         for result in sparse_results:
             if result.chunk_id in combined:
                 # Add sparse score to existing
@@ -226,6 +254,22 @@ class HybridSearchEngine:
                     metadata=result.metadata,
                     source="hybrid"
                 )
+        
+        # Add name-based boost
+        if name_results and name_boost > 0:
+            for result in name_results:
+                if result.chunk_id in combined:
+                    # Boost existing result
+                    combined[result.chunk_id].score += result.score * name_boost
+                else:
+                    # New result from name search
+                    combined[result.chunk_id] = SearchResult(
+                        chunk_id=result.chunk_id,
+                        content=result.content,
+                        score=result.score * name_boost,
+                        metadata=result.metadata,
+                        source="hybrid"
+                    )
         
         # Sort by combined score and return top-k
         sorted_results = sorted(

@@ -4,6 +4,7 @@ Document processing for PDFs, images, and text files.
 
 from typing import Dict, Any, List, Optional
 from pathlib import Path
+import re
 import pytesseract
 from PIL import Image
 from pypdf import PdfReader
@@ -53,6 +54,8 @@ class DocumentProcessor:
             return self._process_image(file_path, doc_metadata)
         elif suffix in ['.txt', '.md']:
             return self._process_text(file_path, doc_metadata)
+        elif suffix == '.json':
+            return self._process_json(file_path, doc_metadata)
         elif suffix == '.csv':
             return self._process_csv(file_path, doc_metadata)
         elif suffix in ['.xlsx', '.xls']:
@@ -163,6 +166,181 @@ class DocumentProcessor:
             "content": content,
             "metadata": doc_metadata,
         }
+    
+    def _process_json(
+        self,
+        file_path: Path,
+        doc_metadata: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Process JSON file (JSONL format for faculty profiles).
+        
+        Creates multiple focused chunks per faculty member, each < 490 tokens.
+        Each chunk includes faculty name for searchability.
+        """
+        import json
+        
+        content_parts = []
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            # Parse JSONL (one JSON object per line)
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+                if not line:
+                    continue
+                
+                try:
+                    obj = json.loads(line)
+                    
+                    # Extract text and metadata
+                    text = obj.get('text', '')
+                    obj_metadata = obj.get('metadata', {})
+                    name = obj_metadata.get('name', f'Entry {line_num}')
+                    profile_url = obj_metadata.get('profile_url', '')
+                    
+                    # Split faculty profile into focused chunks
+                    faculty_chunks = self._split_faculty_profile(
+                        name, profile_url, text
+                    )
+                    content_parts.extend(faculty_chunks)
+                    
+                except json.JSONDecodeError as e:
+                    print(f"  ⚠ Skipping invalid JSON on line {line_num}: {e}")
+                    continue
+        
+        # Check if any entries were parsed
+        if not content_parts:
+            raise ValueError(f"No valid JSON entries found in {file_path.name}")
+        
+        # Combine all chunks with clear separators
+        separator = "\n" + "=" * 60 + "\n\n"
+        content = separator.join(content_parts)
+        
+        return {
+            "content": content,
+            "metadata": {
+                **doc_metadata,
+                "entry_count": len(content_parts),
+                "format": "jsonl"
+            }
+        }
+    
+    def _split_faculty_profile(
+        self,
+        name: str,
+        profile_url: str,
+        text: str
+    ) -> List[str]:
+        """
+        Split a faculty profile into multiple focused chunks.
+        
+        Each chunk:
+        - Includes faculty name for searchability
+        - Is semantically complete
+        - Stays under 490 tokens (~1960 chars)
+        
+        Returns:
+            List of chunk strings
+        """
+        chunks = []
+        
+        # Approximate token limit (490 tokens ≈ 1960 chars)
+        MAX_CHARS = 1960
+        
+        # Parse the text to extract sections
+        # Format: "Name: X Qualification: Y Experience: Z Research Interests: W Publications: ... Awards: ..."
+        
+        # Extract core info (everything before Publications)
+        pub_match = re.search(r'Publications:', text, re.IGNORECASE)
+        awards_match = re.search(r'Awards:', text, re.IGNORECASE)
+        
+        if pub_match:
+            core_info = text[:pub_match.start()].strip()
+            remaining = text[pub_match.start():].strip()
+        else:
+            # No publications section, treat all as core info
+            core_info = text.strip()
+            remaining = ""
+        
+        # Chunk 1: Name + Core Info (Qualification, Experience, Research Interests)
+        chunk1 = f"Faculty: {name}\n"
+        if profile_url:
+            chunk1 += f"Profile: {profile_url}\n\n"
+        chunk1 += core_info
+        chunks.append(chunk1)
+        
+        # Process remaining content (Publications and Awards)
+        if remaining:
+            # Split publications and awards
+            if awards_match:
+                publications_text = remaining[:awards_match.start() - pub_match.start()].strip()
+                awards_text = remaining[awards_match.start() - pub_match.start():].strip()
+            else:
+                publications_text = remaining
+                awards_text = ""
+            
+            # Split publications into multiple chunks if needed
+            if publications_text:
+                pub_chunks = self._split_long_section(
+                    name, "Publications", publications_text, MAX_CHARS
+                )
+                chunks.extend(pub_chunks)
+            
+            # Add awards chunk if exists
+            if awards_text:
+                awards_chunk = f"Faculty: {name}\n\n{awards_text}"
+                if len(awards_chunk) > MAX_CHARS:
+                    # Split awards if too long
+                    award_chunks = self._split_long_section(
+                        name, "Awards", awards_text, MAX_CHARS
+                    )
+                    chunks.extend(award_chunks)
+                else:
+                    chunks.append(awards_chunk)
+        
+        return chunks
+    
+    def _split_long_section(
+        self,
+        name: str,
+        section_name: str,
+        section_text: str,
+        max_chars: int
+    ) -> List[str]:
+        """
+        Split a long section (like Publications) into multiple chunks.
+        
+        Each chunk includes faculty name and section context.
+        """
+        chunks = []
+        
+        # Split by sentences or publication entries
+        # Publications are typically separated by journal names or years
+        sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', section_text)
+        
+        current_chunk = f"Faculty: {name}\n\n{section_name}:\n"
+        header_len = len(current_chunk)
+        chunk_num = 1
+        
+        for sentence in sentences:
+            test_chunk = current_chunk + sentence + " "
+            
+            if len(test_chunk) <= max_chars:
+                current_chunk = test_chunk
+            else:
+                # Save current chunk if it has content beyond header
+                if len(current_chunk) > header_len + 10:
+                    chunks.append(current_chunk.strip())
+                    chunk_num += 1
+                
+                # Start new chunk
+                current_chunk = f"Faculty: {name}\n\n{section_name} (continued {chunk_num}):\n{sentence} "
+        
+        # Add final chunk
+        if len(current_chunk) > header_len + 10:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
     
     def _process_csv(
         self,

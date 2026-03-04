@@ -1,8 +1,8 @@
 {
-  "faculty_data_clean.csv": {
-    "doc_id": "faculty_data_2024",
-    "title": "Faculty Information Database",
-    "date": "2024-03-03",
+  "facult_data.json": {
+    "doc_id": "faculty_profiles_2024",
+    "title": "NMIMS Faculty Profiles Database",
+    "date": "2024-12-01",
     "applies_to": "all_faculty",
     "document_type": "database",
     "domain": "faculty_info",

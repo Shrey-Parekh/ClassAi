@@ -186,7 +186,7 @@ class IngestionPipeline:
         # Process all supported files
         for file_path in directory.rglob('*'):
             if file_path.is_file() and file_path.suffix.lower() in [
-                '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md', '.csv', '.xlsx', '.xls'
+                '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md', '.json', '.csv', '.xlsx', '.xls'
             ]:
                 # Get metadata for this file
                 doc_metadata = metadata_map.get(file_path.name, {
