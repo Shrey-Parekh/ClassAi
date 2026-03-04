@@ -6,6 +6,7 @@ const userInput = document.getElementById('userInput');
 const sendBtn = document.getElementById('sendBtn');
 const statusIndicator = document.getElementById('statusIndicator');
 const statusText = document.getElementById('statusText');
+const thinkingIndicator = document.getElementById('thinkingIndicator');
 const welcomeScreen = document.getElementById('welcomeScreen');
 
 // Auto-resize textarea
@@ -13,6 +14,30 @@ userInput.addEventListener('input', function() {
     this.style.height = 'auto';
     this.style.height = (this.scrollHeight) + 'px';
 });
+
+let thinkingInterval = null;
+const thinkingPhrases = [
+    'Retrieving relevant faculty documents…',
+    'Ranking sections by relevance…',
+    'Drafting an answer, constrained to cited sources…'
+];
+
+function startThinking() {
+    if (!thinkingIndicator) return;
+    let index = 0;
+    thinkingIndicator.textContent = thinkingPhrases[index];
+    clearInterval(thinkingInterval);
+    thinkingInterval = setInterval(() => {
+        index = (index + 1) % thinkingPhrases.length;
+        thinkingIndicator.textContent = thinkingPhrases[index];
+    }, 2200);
+}
+
+function stopThinking() {
+    if (!thinkingIndicator) return;
+    clearInterval(thinkingInterval);
+    thinkingIndicator.textContent = '';
+}
 
 // Check API connection
 async function checkConnection() {
@@ -142,6 +167,7 @@ function addLoadingMessage() {
 async function sendQuery(query) {
     const loadingMessage = addLoadingMessage();
     sendBtn.disabled = true;
+    startThinking();
     
     try {
         const response = await fetch(`${API_URL}/query`, {
@@ -160,12 +186,14 @@ async function sendQuery(query) {
         
         // Remove loading message
         loadingMessage.remove();
+        stopThinking();
         
         // Add assistant response
         addMessage(data.answer, false, data.sources);
         
     } catch (error) {
         loadingMessage.remove();
+        stopThinking();
         addMessage('I apologize, but I encountered an error processing your request. Please make sure the API is running and try again.', false);
         console.error('Error:', error);
     } finally {

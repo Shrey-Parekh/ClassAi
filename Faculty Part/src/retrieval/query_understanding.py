@@ -15,6 +15,7 @@ class QueryUnderstanding:
     entities: List[str]  # Extracted entities (names, departments, etc.)
     is_current_only: bool  # Whether to filter for current/active documents
     metadata_filters: Dict[str, Any]  # Filters to apply
+    expanded_query: str  # Query with added terms for better retrieval
 
 
 class QueryAnalyzer:
@@ -35,7 +36,10 @@ class QueryAnalyzer:
                 r"\bshow\s+me\b",
                 r"\bfind\b",
                 r"\blist\b",
-                r"\btell\s+me\s+about\b"
+                r"\btell\s+me\s+about\b",
+                r"\bsummari[sz]e\b",
+                r"\bexplain\b",
+                r"\bdescribe\b"
             ],
             "procedure": [
                 r"\bhow\s+(do|to|can)\b",
@@ -126,7 +130,8 @@ class QueryAnalyzer:
             domain=domain,
             entities=entities,
             is_current_only=is_current_only,
-            metadata_filters=metadata_filters
+            metadata_filters=metadata_filters,
+            expanded_query=expanded_query
         )
     
     def _expand_query(self, query: str, intent: str) -> str:

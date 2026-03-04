@@ -4,6 +4,49 @@
     "title": "Faculty Information Database",
     "date": "2024-03-03",
     "applies_to": "all_faculty",
-    "document_type": "database"
+    "document_type": "database",
+    "domain": "faculty_info",
+    "is_current": true,
+    "superseded_by": null
+  },
+  "NMIMS_Employee_Resource_Book_2024-25.pdf": {
+    "doc_id": "employee_resource_2024",
+    "title": "NMIMS Employee Resource Book 2024-25",
+    "date": "2024-08-01",
+    "applies_to": "all_faculty",
+    "document_type": "policy",
+    "domain": "policies",
+    "is_current": true,
+    "superseded_by": null
+  },
+  "NMIMS_Faculty_Academic_Guidelines.pdf": {
+    "doc_id": "academic_guidelines_2024",
+    "title": "NMIMS Faculty Academic Guidelines",
+    "date": "2024-08-01",
+    "applies_to": "all_faculty",
+    "document_type": "guideline",
+    "domain": "policies",
+    "is_current": true,
+    "superseded_by": null
+  },
+  "NMIMS_Faculty_Applications_Compendium.pdf": {
+    "doc_id": "applications_2024",
+    "title": "NMIMS Faculty Applications Compendium",
+    "date": "2024-08-01",
+    "applies_to": "all_faculty",
+    "document_type": "procedure",
+    "domain": "procedures",
+    "is_current": true,
+    "superseded_by": null
+  },
+  "NMIMS_Faculty_Employment_Agreement_Legal.pdf": {
+    "doc_id": "employment_agreement_2024",
+    "title": "NMIMS Faculty Employment Agreement",
+    "date": "2024-08-01",
+    "applies_to": "all_faculty",
+    "document_type": "legal",
+    "domain": "policies",
+    "is_current": true,
+    "superseded_by": null
   }
 }

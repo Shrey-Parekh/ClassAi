@@ -75,27 +75,27 @@ class RetrievalPipeline:
         # Step 1: Query understanding
         understanding = self.query_analyzer.analyze(query)
         
-        # Step 2: Generate query embedding (BAAI/bge-large-en-v1.5)
-        query_embedding = self.embedding_model.embed(query)
+        # Step 2: Generate query embedding using EXPANDED query for better retrieval
+        query_embedding = self.embedding_model.embed(understanding.expanded_query)
         
         # Step 3: Adjust retrieval parameters based on intent
         # For procedures, retrieve more chunks for better context
         if understanding.intent == "procedure":
-            top_k_search = 60  # More candidates for procedures
-            top_k_rerank = 10  # More final chunks for procedures
+            top_k_search = 72  # More candidates for procedures
+            top_k_rerank = 12  # More final chunks for procedures
         else:
-            top_k_search = 40  # Default
-            top_k_rerank = top_k  # Use requested top_k
+            top_k_search = 64  # Default for lookups
+            top_k_rerank = 8  # Optimized for lookups
         
-        # Step 4: Hybrid search with metadata pre-filtering
+        # Step 4: Hybrid search with metadata pre-filtering using expanded query
         search_results = self.search_engine.search(
-            query=query,
+            query=understanding.expanded_query,
             query_embedding=query_embedding,
             top_k=top_k_search,
             filters=understanding.metadata_filters
         )
         
-        # Step 5: BGE reranking
+        # Step 5: BGE reranking using ORIGINAL query for relevance scoring
         reranked_results = self.reranker.rerank(
             query=query,
             results=search_results,
