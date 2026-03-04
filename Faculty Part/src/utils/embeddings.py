@@ -14,7 +14,7 @@ class EmbeddingModel:
     def __init__(
         self,
         model: str = None,
-        use_sentence_transformers: bool = True
+        use_sentence_transformers: bool = None
     ):
         """
         Initialize embedding model.
@@ -23,6 +23,10 @@ class EmbeddingModel:
             model: Model name
             use_sentence_transformers: If True, use sentence-transformers; else use Ollama
         """
+        # Check environment variable if not explicitly set
+        if use_sentence_transformers is None:
+            use_sentence_transformers = os.getenv("USE_SENTENCE_TRANSFORMERS", "false").lower() == "true"
+        
         self.use_sentence_transformers = use_sentence_transformers
         
         if self.use_sentence_transformers:

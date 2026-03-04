@@ -160,18 +160,31 @@ class VectorDBClient:
     
     def _build_filter(self, filters: Dict[str, Any]) -> Filter:
         """Build Qdrant filter from dict."""
+        # If already a Filter object, return as-is
+        if isinstance(filters, Filter):
+            return filters
+        
+        # If not a dict, return None
+        if not isinstance(filters, dict):
+            return None
+        
         conditions = []
         
         for key, value in filters.items():
+            # Skip None values
+            if value is None:
+                continue
+            
             if isinstance(value, list):
                 # Multiple values - use should (OR)
                 for v in value:
-                    conditions.append(
-                        FieldCondition(
-                            key=key,
-                            match=MatchValue(value=v)
+                    if v is not None:
+                        conditions.append(
+                            FieldCondition(
+                                key=key,
+                                match=MatchValue(value=v)
+                            )
                         )
-                    )
             else:
                 conditions.append(
                     FieldCondition(

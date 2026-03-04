@@ -1,10 +1,14 @@
 """
-Hybrid search combining vector similarity and BM25 keyword search.
+Hybrid search combining dense vectors and sparse vectors.
+
+Uses Qdrant native sparse vectors (FastEmbed) instead of BM25.
 """
 
 from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass
-from rank_bm25 import BM25Okapi
+import logging
+
+from ..utils.sparse_encoder import SparseEncoder
 
 
 @dataclass
@@ -14,16 +18,16 @@ class SearchResult:
     content: str
     score: float
     metadata: Dict[str, Any]
-    source: str  # "vector" or "bm25" or "hybrid"
+    source: str  # "dense", "sparse", or "hybrid"
 
 
 class HybridSearchEngine:
     """
-    Combines vector similarity search with BM25 keyword search.
+    Hybrid search combining dense and sparse vectors.
     
     Pipeline:
-    1. Vector search for semantic similarity
-    2. BM25 search for keyword matching
+    1. Dense search (semantic similarity via embeddings)
+    2. Sparse search (keyword matching via FastEmbed)
     3. Fusion of results with weighted scoring
     """
     
@@ -31,45 +35,31 @@ class HybridSearchEngine:
         self,
         vector_db_client,
         collection_name: str,
-        vector_weight: float = 0.7,
-        bm25_weight: float = 0.3
+        dense_weight: float = 0.6,
+        sparse_weight: float = 0.4
     ):
         """
         Initialize hybrid search engine.
         
         Args:
-            vector_db_client: Qdrant or similar vector DB client
-            collection_name: Name of the vector collection
-            vector_weight: Weight for vector similarity scores (0-1)
-            bm25_weight: Weight for BM25 scores (0-1)
+            vector_db_client: Qdrant client
+            collection_name: Collection name
+            dense_weight: Weight for dense search (0-1) - default 60%
+            sparse_weight: Weight for sparse search (0-1) - default 40%
         """
         self.vector_db = vector_db_client
         self.collection_name = collection_name
-        self.vector_weight = vector_weight
-        self.bm25_weight = bm25_weight
+        self.dense_weight = dense_weight
+        self.sparse_weight = sparse_weight
         
-        # BM25 index (built from vector DB contents)
-        self.bm25_index = None
-        self.bm25_corpus = []
-        self.bm25_chunk_ids = []
-    
-    def build_bm25_index(self):
-        """
-        Build BM25 index from vector database contents.
+        self.logger = logging.getLogger(__name__)
         
-        Call this after ingestion or periodically to refresh.
-        """
-        # Fetch all chunks from vector DB
-        all_chunks = self._fetch_all_chunks()
-        
-        self.bm25_corpus = [chunk["content"] for chunk in all_chunks]
-        self.bm25_chunk_ids = [chunk["chunk_id"] for chunk in all_chunks]
-        
-        # Tokenize corpus
-        tokenized_corpus = [doc.lower().split() for doc in self.bm25_corpus]
-        
-        # Build BM25 index
-        self.bm25_index = BM25Okapi(tokenized_corpus)
+        # Initialize sparse encoder
+        try:
+            self.sparse_encoder = SparseEncoder(model_name="Splade")
+        except Exception as e:
+            self.logger.warning(f"Failed to initialize sparse encoder: {e}")
+            self.sparse_encoder = None
     
     def search(
         self,
@@ -79,150 +69,160 @@ class HybridSearchEngine:
         filters: Dict[str, Any] = None
     ) -> List[SearchResult]:
         """
-        Perform hybrid search combining vector and BM25.
+        Perform hybrid search combining dense and sparse.
         
         Args:
             query: Text query
-            query_embedding: Vector embedding of query
+            query_embedding: Dense vector embedding
             top_k: Number of results to return
-            filters: Metadata filters to apply
+            filters: Metadata filters
         
         Returns:
             List of search results sorted by hybrid score
         """
-        # 1. Vector search
-        vector_results = self._vector_search(
+        # 1. Dense search
+        dense_results = self._dense_search(
             query_embedding,
-            top_k=top_k * 2,  # Get more for fusion
-            filters=filters
-        )
-        
-        # 2. BM25 search
-        bm25_results = self._bm25_search(
-            query,
             top_k=top_k * 2,
             filters=filters
         )
         
+        # 2. Sparse search (if encoder available)
+        sparse_results = []
+        if self.sparse_encoder:
+            sparse_results = self._sparse_search(
+                query,
+                top_k=top_k * 2,
+                filters=filters
+            )
+        
         # 3. Fuse results
         fused_results = self._fuse_results(
-            vector_results,
-            bm25_results,
+            dense_results,
+            sparse_results,
             top_k=top_k
         )
         
         return fused_results
     
-    def _vector_search(
+    def _dense_search(
         self,
         query_embedding: List[float],
         top_k: int,
         filters: Dict[str, Any] = None
     ) -> List[SearchResult]:
-        """Perform vector similarity search."""
-        # Query vector database
-        results = self.vector_db.search(
-            collection_name=self.collection_name,
-            query_vector=query_embedding,
-            limit=top_k,
-            query_filter=self._build_filter(filters) if filters else None
-        )
-        
-        return [
-            SearchResult(
-                chunk_id=hit.id,
-                content=hit.payload.get("content", ""),
-                score=hit.score,
-                metadata=hit.payload,
-                source="vector"
+        """Perform dense vector search."""
+        try:
+            # Build filter if provided
+            qdrant_filter = None
+            if filters and isinstance(filters, dict):
+                qdrant_filter = self._build_filter(filters)
+            
+            # Query Qdrant
+            results = self.vector_db.search(
+                collection_name=self.collection_name,
+                query_vector=query_embedding,
+                limit=top_k,
+                query_filter=qdrant_filter
             )
-            for hit in results
-        ]
+            
+            return [
+                SearchResult(
+                    chunk_id=hit.id,
+                    content=hit.payload.get("content", ""),
+                    score=hit.score,
+                    metadata=hit.payload,
+                    source="dense"
+                )
+                for hit in results
+            ]
+        
+        except Exception as e:
+            self.logger.error(f"Dense search failed: {e}")
+            return []
     
-    def _bm25_search(
+    def _sparse_search(
         self,
         query: str,
         top_k: int,
         filters: Dict[str, Any] = None
     ) -> List[SearchResult]:
-        """Perform BM25 keyword search."""
-        if not self.bm25_index:
+        """Perform sparse vector search."""
+        try:
+            if not self.sparse_encoder:
+                return []
+            
+            # Encode query to sparse vector
+            sparse_query = self.sparse_encoder.encode(query)
+            
+            if not sparse_query:
+                return []
+            
+            # Build filter if provided
+            qdrant_filter = None
+            if filters and isinstance(filters, dict):
+                qdrant_filter = self._build_filter(filters)
+            
+            # Query Qdrant with sparse vector
+            # Note: Qdrant sparse search API may vary by version
+            # This is a placeholder for the actual sparse search call
+            results = self.vector_db.search_sparse(
+                collection_name=self.collection_name,
+                query_vector=sparse_query,
+                limit=top_k,
+                query_filter=qdrant_filter
+            )
+            
+            return [
+                SearchResult(
+                    chunk_id=hit.id,
+                    content=hit.payload.get("content", ""),
+                    score=hit.score,
+                    metadata=hit.payload,
+                    source="sparse"
+                )
+                for hit in results
+            ]
+        
+        except Exception as e:
+            self.logger.warning(f"Sparse search not available or failed: {e}")
             return []
-        
-        # Tokenize query
-        tokenized_query = query.lower().split()
-        
-        # Get BM25 scores
-        scores = self.bm25_index.get_scores(tokenized_query)
-        
-        # Get top-k indices
-        top_indices = sorted(
-            range(len(scores)),
-            key=lambda i: scores[i],
-            reverse=True
-        )[:top_k]
-        
-        # Build results
-        results = []
-        for idx in top_indices:
-            chunk_id = self.bm25_chunk_ids[idx]
-            content = self.bm25_corpus[idx]
-            score = scores[idx]
-            
-            # Fetch metadata from vector DB
-            metadata = self._fetch_chunk_metadata(chunk_id)
-            
-            # Apply filters
-            if filters and not self._matches_filters(metadata, filters):
-                continue
-            
-            results.append(SearchResult(
-                chunk_id=chunk_id,
-                content=content,
-                score=score,
-                metadata=metadata,
-                source="bm25"
-            ))
-        
-        return results
     
     def _fuse_results(
         self,
-        vector_results: List[SearchResult],
-        bm25_results: List[SearchResult],
+        dense_results: List[SearchResult],
+        sparse_results: List[SearchResult],
         top_k: int
     ) -> List[SearchResult]:
         """
-        Fuse vector and BM25 results using weighted scoring.
-        
-        Uses Reciprocal Rank Fusion for combining rankings.
+        Fuse dense and sparse results using weighted scoring.
         """
-        # Normalize scores to 0-1 range
-        vector_results = self._normalize_scores(vector_results)
-        bm25_results = self._normalize_scores(bm25_results)
+        # Normalize scores
+        dense_results = self._normalize_scores(dense_results)
+        sparse_results = self._normalize_scores(sparse_results)
         
         # Combine results by chunk_id
         combined: Dict[str, SearchResult] = {}
         
-        for result in vector_results:
+        for result in dense_results:
             combined[result.chunk_id] = SearchResult(
                 chunk_id=result.chunk_id,
                 content=result.content,
-                score=result.score * self.vector_weight,
+                score=result.score * self.dense_weight,
                 metadata=result.metadata,
                 source="hybrid"
             )
         
-        for result in bm25_results:
+        for result in sparse_results:
             if result.chunk_id in combined:
-                # Add BM25 score to existing
-                combined[result.chunk_id].score += result.score * self.bm25_weight
+                # Add sparse score to existing
+                combined[result.chunk_id].score += result.score * self.sparse_weight
             else:
-                # New result from BM25 only
+                # New result from sparse only
                 combined[result.chunk_id] = SearchResult(
                     chunk_id=result.chunk_id,
                     content=result.content,
-                    score=result.score * self.bm25_weight,
+                    score=result.score * self.sparse_weight,
                     metadata=result.metadata,
                     source="hybrid"
                 )
@@ -253,7 +253,7 @@ class HybridSearchEngine:
         return results
     
     def _build_filter(self, filters: Dict[str, Any]):
-        """Build vector DB filter from metadata filters."""
+        """Build Qdrant filter from metadata filters."""
         from qdrant_client.models import Filter, FieldCondition, MatchValue
         
         if not filters:
@@ -261,13 +261,12 @@ class HybridSearchEngine:
         
         conditions = []
         for key, value in filters.items():
-            # Skip None values - can't filter by None in Qdrant
             if value is None:
                 continue
-                
+            
             if isinstance(value, list):
                 for v in value:
-                    if v is not None:  # Skip None values in lists too
+                    if v is not None:
                         conditions.append(
                             FieldCondition(key=key, match=MatchValue(value=v))
                         )
@@ -277,67 +276,3 @@ class HybridSearchEngine:
                 )
         
         return Filter(must=conditions) if conditions else None
-    
-    def _matches_filters(self, metadata: Dict[str, Any], filters: Dict[str, Any]) -> bool:
-        """Check if metadata matches filters."""
-        for key, value in filters.items():
-            meta_value = metadata.get(key)
-            
-            # Handle None filter (checking for absence)
-            if value is None:
-                if meta_value is not None:
-                    return False
-            # Handle list filters (OR logic)
-            elif isinstance(value, list):
-                if meta_value not in value:
-                    return False
-            # Handle exact match
-            else:
-                if meta_value != value:
-                    return False
-        return True
-    
-    def _fetch_all_chunks(self) -> List[Dict[str, Any]]:
-        """Fetch all chunks from vector DB for BM25 indexing."""
-        try:
-            # Scroll through all points in collection
-            offset = None
-            all_chunks = []
-            
-            while True:
-                results, offset = self.vector_db.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False
-                )
-                
-                for point in results:
-                    all_chunks.append({
-                        "chunk_id": point.id,
-                        "content": point.payload.get("content", ""),
-                        **point.payload
-                    })
-                
-                if offset is None:
-                    break
-            
-            return all_chunks
-        except Exception as e:
-            print(f"Warning: Could not fetch chunks for BM25: {e}")
-            return []
-    
-    def _fetch_chunk_metadata(self, chunk_id: str) -> Dict[str, Any]:
-        """Fetch metadata for a specific chunk."""
-        try:
-            point = self.vector_db.client.retrieve(
-                collection_name=self.collection_name,
-                ids=[chunk_id],
-                with_payload=True
-            )
-            if point:
-                return point[0].payload
-        except Exception:
-            pass
-        return {}

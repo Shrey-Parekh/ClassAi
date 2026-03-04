@@ -23,27 +23,43 @@ def main():
         
         collection_name = "faculty_chunks"
         
-        # Check if collection exists
+        # Try to delete collection via REST API directly (bypass pydantic validation)
         try:
-            info = vector_db.get_collection_info(collection_name)
-            print(f"Found collection: {collection_name}")
-            print(f"Current points: {info['points_count']}")
-            print(f"Status: {info['status']}\n")
+            import requests
+            url = "http://localhost:6333/collections/faculty_chunks"
+            response = requests.delete(url, timeout=5)
             
-            # Confirm deletion
-            response = input(f"Delete collection '{collection_name}' and all data? (yes/no): ")
-            
-            if response.lower() == 'yes':
-                vector_db.delete_collection(collection_name)
-                print(f"\n✓ Collection '{collection_name}' deleted successfully!")
+            if response.status_code in [200, 204]:
+                print(f"✓ Collection '{collection_name}' deleted successfully!")
                 print("\nYou can now run ingestion to start fresh:")
                 print("python scripts/ingest_documents.py --input data/raw --metadata data/metadata.json")
+            elif response.status_code == 404:
+                print(f"Collection '{collection_name}' does not exist.")
+                print("Nothing to delete.")
             else:
-                print("\nCancelled. No changes made.")
+                print(f"Unexpected response: {response.status_code}")
+                print(response.text)
         
         except Exception as e:
-            print(f"Collection '{collection_name}' does not exist or error: {e}")
-            print("Nothing to delete.")
+            print(f"Could not delete via REST API: {e}")
+            print("Trying via client...")
+            
+            try:
+                info = vector_db.get_collection_info(collection_name)
+                print(f"Found collection: {collection_name}")
+                
+                # Confirm deletion
+                response = input(f"Delete collection '{collection_name}' and all data? (yes/no): ")
+                
+                if response.lower() == 'yes':
+                    vector_db.delete_collection(collection_name)
+                    print(f"\n✓ Collection '{collection_name}' deleted successfully!")
+                else:
+                    print("\nCancelled. No changes made.")
+            
+            except Exception as e2:
+                print(f"Collection does not exist or error: {e2}")
+                print("Nothing to delete.")
     
     except Exception as e:
         print(f"✗ Error: {e}")

@@ -36,7 +36,7 @@ class IntentType(Enum):
 
 
 # Chunking constraints
-MAX_LEVEL2_TOKENS = 600  # Soft limit, never break meaning to hit this
+MAX_LEVEL2_TOKENS = 800  # Increased for procedures (keep complete processes together)
 OVERLAP_TOKENS = 50  # Only for Level 2 chunks
 
 # Retrieval configuration

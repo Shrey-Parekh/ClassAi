@@ -7,22 +7,24 @@ Usage:
 """
 
 import argparse
+import traceback
 from pathlib import Path
 import sys
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv
 from src.ingestion.pipeline import IngestionPipeline
 from src.utils.vector_db import VectorDBClient
-from src.utils.embeddings import EmbeddingModel
-from dotenv import load_dotenv
+from src.utils.dual_encoder_embeddings import DualEncoderEmbeddings
 
 # Load environment variables
 load_dotenv()
 
 
 def main():
+    """Ingest documents using BAAI/bge-large-en-v1.5 encoder."""
     parser = argparse.ArgumentParser(
         description="Ingest faculty documents into RAG system"
     )
@@ -53,15 +55,20 @@ def main():
     print(f"Ingesting documents from: {args.input}\n")
     
     try:
-        # Initialize vector DB and embedding model
+        # Initialize vector DB
         print("Initializing components...")
         vector_db = VectorDBClient(collection_name=args.collection)
-        embedding_model = EmbeddingModel()
         
-        # Create collection if it doesn't exist
+        # Initialize encoder (BAAI/bge-large-en-v1.5)
+        embedding_model = DualEncoderEmbeddings(
+            model_name="BAAI/bge-large-en-v1.5",
+            log_file="embedding_log.jsonl"
+        )
+        
+        # Create collection with 1024 dimensions (BAAI/bge-large-en-v1.5)
         vector_db.create_collection(
             collection_name=args.collection,
-            vector_size=embedding_model.get_dimension()
+            vector_size=1024
         )
         
         # Initialize ingestion pipeline
@@ -91,22 +98,23 @@ def main():
         print(f"Failed: {len(failed)}")
         
         total_chunks = sum(r.get('chunks_created', 0) for r in successful)
+        total_stored = sum(r.get('chunks_stored', 0) for r in successful)
+        total_split = sum(r.get('chunks_split', 0) for r in successful)
+        
         print(f"Total chunks created: {total_chunks}")
+        print(f"Total chunks stored: {total_stored}")
+        print(f"Total chunks split: {total_split}")
         
         if failed:
             print("\nFailed documents:")
             for r in failed:
                 print(f"  - {r['file_path']}: {r['error']}")
         
-        # Show collection info
-        print("\nCollection info:")
-        info = vector_db.get_collection_info(args.collection)
-        print(f"  Points: {info['points_count']}")
-        print(f"  Status: {info['status']}")
+        # Skip collection info (validation error with Qdrant server)
+        print("\nCollection info: (skipped due to Qdrant API compatibility)")
         
     except Exception as e:
         print(f"\n✗ Ingestion failed: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

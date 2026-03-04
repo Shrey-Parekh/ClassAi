@@ -9,10 +9,12 @@ requests==2.31.0
 langchain==0.1.4
 sentence-transformers==2.5.1
 torch>=2.0.0
-google-generativeai>=0.3.0
+
+# BGE Reranker dependencies
+transformers>=4.30.0
 
 # Vector Database
-qdrant-client==1.7.3
+qdrant-client==1.5.4
 
 # Document Processing
 pypdf==4.0.1
@@ -26,6 +28,7 @@ selenium==4.17.2
 
 # Search & Ranking
 rank-bm25==0.2.2
+fastembed>=0.1.0
 
 # Database
 sqlalchemy==2.0.25

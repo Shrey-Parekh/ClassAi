@@ -18,7 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from ..retrieval.pipeline import RetrievalPipeline
 from ..generation.answer_generator import AnswerGenerator
 from ..utils.vector_db import VectorDBClient
-from ..utils.embeddings import EmbeddingModel
+from ..utils.query_embedder import QueryEmbedder
 from ..utils.llm import LLMClient
 
 
@@ -69,23 +69,19 @@ async def startup_event():
         print("Initializing Faculty Part RAG system...")
         
         vector_db = VectorDBClient()
-        embedding_model = EmbeddingModel()
+        query_embedder = QueryEmbedder(model_name="BAAI/bge-large-en-v1.5")
         llm_client = LLMClient()
         
         # Create collection if it doesn't exist
         vector_db.create_collection(
-            vector_size=embedding_model.get_dimension()
+            vector_size=query_embedder.get_dimension()
         )
         
         # Initialize retrieval pipeline
         retrieval_pipeline = RetrievalPipeline(
             vector_db_client=vector_db,
-            embedding_model=embedding_model
+            embedding_model=query_embedder
         )
-        
-        # Build BM25 index
-        print("Building BM25 index...")
-        retrieval_pipeline.search_engine.build_bm25_index()
         
         # Initialize answer generator
         answer_generator = AnswerGenerator(llm_client)
