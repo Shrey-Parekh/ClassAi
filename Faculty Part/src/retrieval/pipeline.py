@@ -4,6 +4,7 @@ Complete retrieval pipeline orchestrating all components.
 
 from typing import Dict, Any, List
 from config.chunking_config import TOP_K_RERANKED
+import logging
 
 from .query_understanding import QueryAnalyzer
 from .hybrid_search import HybridSearchEngine
@@ -17,21 +18,14 @@ class RetrievalPipeline:
     Pipeline steps:
     1. Query understanding (intent + domain + entities)
     2. Metadata pre-filtering (domain + is_current)
-    3. Query embedding (BAAI/bge-large-en-v1.5)
-    4. Hybrid search (dense + sparse) → 70-80 candidates
-    5. BGE reranking → 12 final chunks
+    3. Query embedding (BAAI/bge-m3)
+    4. Hybrid search with intent-based weighting → 20 candidates
+    5. BGE reranking → 15 final chunks
     6. Return final chunks
     
-    Token Budget Optimization (8,192 total):
-    - System prompt: ~800 tokens
-    - Query: ~200 tokens
-    - Context: 12 × 490 = 5,880 tokens (~6,100 with overhead)
-    - Output reserve: ~1,000 tokens
-    - Total: ~8,000 tokens (98% utilization)
-    
-    Embedding model: BAAI/bge-large-en-v1.5 (1024 dimensions)
-    - Documents: Embedded with BAAI/bge-large-en-v1.5
-    - Queries: Embedded with BAAI/bge-large-en-v1.5
+    Embedding model: BAAI/bge-m3 (1024 dimensions)
+    - Documents: Embedded with BAAI/bge-m3
+    - Queries: Embedded with BAAI/bge-m3
     - Consistency: Guaranteed (same model for both)
     """
     
@@ -39,15 +33,17 @@ class RetrievalPipeline:
         self,
         vector_db_client,
         embedding_model,
-        collection_name: str = "faculty_chunks"
+        collection_name: str = "faculty_chunks",
+        llm_client=None
     ):
         """
         Initialize retrieval pipeline.
         
         Args:
             vector_db_client: Vector database client (Qdrant)
-            embedding_model: Query embedding model (BAAI/bge-large-en-v1.5)
+            embedding_model: Query embedding model (BAAI/bge-m3)
             collection_name: Vector DB collection name
+            llm_client: Optional LLM client for HyDE (topic search only)
         """
         self.query_analyzer = QueryAnalyzer()
         self.search_engine = HybridSearchEngine(
@@ -58,6 +54,8 @@ class RetrievalPipeline:
         self.embedding_model = embedding_model
         self.vector_db = vector_db_client
         self.collection_name = collection_name
+        self.llm_client = llm_client
+        self.logger = logging.getLogger(__name__)
     
     def retrieve(
         self,
@@ -82,54 +80,88 @@ class RetrievalPipeline:
         # Step 1: Query understanding
         understanding = self.query_analyzer.analyze(query)
         
-        # Step 2: Generate query embedding using ORIGINAL query for clean semantic signal
-        # CRITICAL: Do NOT use expanded query for embedding - it dilutes semantic meaning
-        query_embedding = self.embedding_model.embed(query)
+        # Step 1.5: Attempt direct metadata match for name queries
+        # This bypasses vector search entirely if we find an exact name match
+        if understanding.intent == "lookup" and understanding.entities:
+            try:
+                direct_results = self._attempt_direct_name_match(understanding.entities[0])
+                if direct_results:
+                    self.logger.info(f"Direct metadata match found for: {understanding.entities[0]}")
+                    return {
+                        "chunks": direct_results,
+                        "intent": understanding.intent,
+                        "domain": understanding.domain,
+                        "entities": understanding.entities,
+                        "metadata": {
+                            "retrieval_path": "direct_metadata_match",
+                            "initial_results": len(direct_results),
+                            "final_results": len(direct_results),
+                            "filters_applied": {},
+                            "is_current_only": understanding.is_current_only,
+                            "name_boost_applied": False
+                        }
+                    }
+            except Exception as e:
+                self.logger.warning(f"Direct metadata match failed, falling back to hybrid search: {e}")
         
-        # Step 3: For faculty name queries, create name-focused embedding
+        # Step 2: Strip titles from query for embedding
+        query_clean = self.query_analyzer._strip_titles_for_embedding(query)
+        
+        # Step 3: Generate query embedding
+        # For TOPIC_SEARCH: Use HyDE (hypothetical document embedding)
+        # For LOOKUP: Use dual embedding (original + name-focused)
+        # For others: Use standard embedding
+        query_embedding = None
         name_embedding = None
         name_boost = 0.0
         
+        if understanding.intent == "topic_search" and self.llm_client:
+            # HyDE: Generate hypothetical faculty description for topic search
+            try:
+                query_embedding = self._generate_hyde_embedding(query_clean)
+                self.logger.info(f"HyDE embedding generated for topic search: {query_clean}")
+            except Exception as e:
+                self.logger.warning(f"HyDE generation failed, falling back to standard embedding: {e}")
+                query_embedding = self.embedding_model.embed(query_clean)
+        else:
+            # Standard embedding for all other intents
+            query_embedding = self.embedding_model.embed(query_clean)
+        
+        # Step 4: For faculty name queries, create name-focused embedding
         if understanding.intent == "lookup" and understanding.entities:
-            # Extract faculty name (first entity)
-            faculty_name = understanding.entities[0]
+            # Extract faculty name (first entity) and strip titles
+            faculty_name_clean = self.query_analyzer._strip_titles_for_embedding(understanding.entities[0])
             
             # Create name-focused query for better matching
             # Format: "Faculty: [Name]" to match chunk format
-            name_query = f"Faculty: {faculty_name}"
+            name_query = f"Faculty: {faculty_name_clean}"
             name_embedding = self.embedding_model.embed(name_query)
             name_boost = 0.3  # 30% boost for name-based matches
         
-        # Step 4: Adjust retrieval parameters based on intent
-        # Optimized to maximize 8,192 token context window usage
-        # Available tokens: 8,192 - 800 (system) - 200 (query) - 1,000 (output) = 6,192 tokens
+        # Step 5: Set retrieval parameters
+        # top 20 → rerank → keep top 15
+        top_k_search = 20
+        top_k_rerank = 15
         
-        if understanding.intent == "procedure":
-            # Procedure queries: Use ~6,100 tokens for comprehensive context
-            top_k_search = 80  # More candidates for procedures
-            top_k_rerank = 12  # 12 × 490 = 5,880 tokens + overhead = ~6,100 tokens
-        else:
-            # Lookup queries: Use ~6,000 tokens for detailed answers
-            top_k_search = 70  # More candidates for lookups
-            top_k_rerank = 12  # 12 × 490 = 5,880 tokens + overhead = ~6,000 tokens
-        
-        # Step 5: Hybrid search with metadata pre-filtering
-        # - Dense search uses ORIGINAL query embedding (clean semantic signal)
-        # - Sparse search uses EXPANDED query (keyword coverage)
-        # - Name search uses NAME-FOCUSED embedding (for faculty queries)
+        # Step 6: Hybrid search with metadata pre-filtering and intent-based weighting
+        # - Dense search uses CLEANED query embedding (titles stripped)
+        # - Sparse search uses EXPANDED query (titles stripped, keywords added)
+        # - Name search uses NAME-FOCUSED embedding (titles stripped)
+        # - Intent determines dense/sparse weight balance
         search_results = self.search_engine.search(
-            original_query=query,  # For logging/debugging
-            expanded_query=understanding.expanded_query,  # For sparse/keyword search
-            query_embedding=query_embedding,  # From ORIGINAL query
+            original_query=query_clean,  # Cleaned query for logging
+            expanded_query=understanding.expanded_query,  # Already has titles stripped
+            query_embedding=query_embedding,  # From CLEANED query
             top_k=top_k_search,
             filters=understanding.metadata_filters,
             name_embedding=name_embedding,  # Optional name-focused boost
-            name_boost=name_boost
+            name_boost=name_boost,
+            intent=understanding.intent  # For dynamic weight selection
         )
         
-        # Step 6: BGE reranking using ORIGINAL query for relevance scoring
+        # Step 7: BGE reranking using CLEANED query for relevance scoring
         reranked_results = self.reranker.rerank(
-            query=query,
+            query=query_clean,
             results=search_results,
             top_k=top_k_rerank
         )
@@ -151,6 +183,7 @@ class RetrievalPipeline:
             "domain": understanding.domain,
             "entities": understanding.entities,
             "metadata": {
+                "retrieval_path": "hybrid_search",
                 "initial_results": len(search_results),
                 "final_results": len(chunks),
                 "filters_applied": understanding.metadata_filters,
@@ -158,3 +191,95 @@ class RetrievalPipeline:
                 "name_boost_applied": name_boost > 0
             }
         }
+    
+    def _generate_hyde_embedding(self, query: str) -> List[float]:
+        """
+        Generate HyDE (Hypothetical Document Embedding) for topic search.
+        
+        Creates a hypothetical faculty description matching the topic,
+        then embeds that description instead of the raw query.
+        
+        This improves topic-based faculty search by matching against
+        how faculty profiles are actually written.
+        
+        Args:
+            query: Clean query (titles already stripped)
+        
+        Returns:
+            Embedding vector for the hypothetical document
+        """
+        hyde_prompt = f"""Write one sentence describing a faculty member who works on this topic: {query}
+
+Format exactly like this example:
+"Dr. X is a faculty member in the Computer Science department specializing in machine learning and neural networks with publications in deep learning."
+
+Write only the sentence, nothing else."""
+        
+        # Generate hypothetical description
+        hypothetical = self.llm_client.generate(
+            hyde_prompt,
+            temperature=0.5,
+            max_tokens=80
+        )
+        
+        # Embed the hypothetical description
+        return self.embedding_model.embed(hypothetical.strip())
+    
+    def _attempt_direct_name_match(self, entity_name: str) -> List[Dict[str, Any]]:
+        """
+        Attempt direct metadata filter match for faculty name queries.
+        
+        This bypasses vector search entirely if we find exact name matches
+        in the name_variants field.
+        
+        Args:
+            entity_name: Extracted entity (faculty name with possible titles)
+        
+        Returns:
+            List of matching chunks, or empty list if no match
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchAny
+        
+        # Strip titles and normalize
+        name_clean = self.query_analyzer._strip_titles_for_embedding(entity_name)
+        name_parts = name_clean.split()
+        
+        if not name_parts:
+            return []
+        
+        try:
+            # Attempt scroll with name_variants filter
+            results, _ = self.vector_db.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="name_variants",
+                            match=MatchAny(any=name_parts)
+                        )
+                    ]
+                ),
+                limit=5,
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            if results:
+                # Format results to match standard chunk format
+                chunks = [
+                    {
+                        "chunk_id": point.id,
+                        "content": point.payload.get("content", ""),
+                        "score": 1.0,  # Direct match gets perfect score
+                        "metadata": point.payload,
+                    }
+                    for point in results
+                ]
+                return chunks
+            
+        except Exception as e:
+            # name_variants field may not exist yet - log and return empty
+            self.logger.debug(f"name_variants field not available: {e}")
+            return []
+        
+        return []

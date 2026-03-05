@@ -1,5 +1,5 @@
 """
-Single reliable encoder using BAAI/bge-large-en-v1.5.
+Single reliable encoder using BAAI/bge-m3.
 
 Direct sentence-transformers loading — no HTTP, no fallback, no silent failures.
 """
@@ -16,7 +16,7 @@ import torch
 
 class DualEncoderEmbeddings:
     """
-    Single encoder wrapper using BAAI/bge-large-en-v1.5.
+    Single encoder wrapper using BAAI/bge-m3.
     
     Loads model directly via sentence-transformers.
     No Ollama HTTP calls. No fallback logic. No silent failures.
@@ -24,7 +24,7 @@ class DualEncoderEmbeddings:
     
     def __init__(
         self,
-        model_name: str = "BAAI/bge-large-en-v1.5",
+        model_name: str = "BAAI/bge-m3",
         log_file: str = "embedding_log.jsonl"
     ):
         """

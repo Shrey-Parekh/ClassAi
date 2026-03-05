@@ -273,7 +273,8 @@ class QueryAnalyzer:
         """
         Preprocess query to clean and normalize before analysis.
         
-        Removes filler words, normalizes titles, handles special characters.
+        Removes filler words, handles special characters.
+        Does NOT strip titles here - that's done in _strip_titles_for_embedding.
         """
         # Remove extra whitespace
         query = ' '.join(query.split())
@@ -296,13 +297,6 @@ class QueryAnalyzer:
         if not query.strip():
             query = original_query
         
-        # Normalize titles
-        query = re.sub(r'\bdr\b', 'Dr.', query, flags=re.IGNORECASE)
-        query = re.sub(r'\bprof\b', 'Prof.', query, flags=re.IGNORECASE)
-        query = re.sub(r'\bmr\b', 'Mr.', query, flags=re.IGNORECASE)
-        query = re.sub(r'\bms\b', 'Ms.', query, flags=re.IGNORECASE)
-        query = re.sub(r'\bmrs\b', 'Mrs.', query, flags=re.IGNORECASE)
-        
         # Handle parentheses in names (keep them for now, will be handled in entity extraction)
         # Example: "Pragati Khare (Shrivastava)" stays as is
         
@@ -310,6 +304,46 @@ class QueryAnalyzer:
         query = ' '.join(query.split())
         
         return query.strip()
+    
+    def _strip_titles_for_embedding(self, text: str) -> str:
+        """
+        Strip all titles from text before embedding or SPLADE.
+        
+        This ensures clean name matching without title noise.
+        Applied before: query embedding, name embedding, SPLADE expansion.
+        NOT applied to display query shown to user.
+        """
+        text_lower = text.lower()
+        
+        # Titles to strip (order matters - longer phrases first)
+        titles = [
+            "associate professor",
+            "assistant professor",
+            "professor",
+            "prof.",
+            "prof",
+            "doctor",
+            "dr.",
+            "dr",
+            "mrs.",
+            "mrs",
+            "mr.",
+            "mr",
+            "ms.",
+            "ms",
+            "sir",
+            "ma'am",
+            "madam"
+        ]
+        
+        for title in titles:
+            # Remove title with word boundaries
+            text_lower = re.sub(r'\b' + re.escape(title) + r'\b', '', text_lower)
+        
+        # Clean up extra whitespace
+        text_lower = ' '.join(text_lower.split())
+        
+        return text_lower.strip()
     
     def _normalize_query(self, query: str) -> str:
         """
@@ -364,15 +398,19 @@ class QueryAnalyzer:
         IMPORTANT: This expanded query is used ONLY for sparse/keyword search,
         NOT for dense embedding.
         
+        Titles are stripped before expansion for clean keyword matching.
+        
         Args:
             query: Original query
             intent: Detected intent
             entities: Extracted entities (names, etc.)
         
         Returns:
-            Expanded query string for keyword search
+            Expanded query string for keyword search (titles stripped)
         """
-        query_lower = query.lower()
+        # Strip titles before expansion
+        query_clean = self._strip_titles_for_embedding(query)
+        query_lower = query_clean.lower()
         expansion_terms = []
         
         # Intent-based expansion
@@ -389,7 +427,9 @@ class QueryAnalyzer:
                 
                 # Add name variations for better matching
                 if entities:
-                    name_variations = self._extract_name_variations(entities[0])
+                    # Strip titles from entity before extracting variations
+                    clean_entity = self._strip_titles_for_embedding(entities[0])
+                    name_variations = self._extract_name_variations(clean_entity)
                     expansion_terms.extend(name_variations)
             
             # Research/publication lookup
@@ -415,9 +455,9 @@ class QueryAnalyzer:
         expansion_terms = expansion_terms[:max_terms]
         
         if expansion_terms:
-            return f"{query} {' '.join(expansion_terms)}"
+            return f"{query_clean} {' '.join(expansion_terms)}"
         
-        return query
+        return query_clean
     
     def _extract_name_variations(self, name: str) -> List[str]:
         """
@@ -567,19 +607,18 @@ class QueryAnalyzer:
         is_current_only: bool,
         entities: List[str]
     ) -> Dict[str, Any]:
-        """Build metadata filters based on query understanding."""
-        filters = {}
-        
-        # Domain-based filtering (optional - only for specific domains)
-        # Don't filter by domain for "general" queries to allow broad search
-        if domain != "general":
-            filters["domain"] = domain
-        
-        # Current documents only (if explicitly requested)
-        if is_current_only:
-            filters["is_current"] = True
-        
-        # Note: We don't filter by superseded_by unless explicitly needed
-        # This allows retrieval of all current documents
-        
-        return filters
+        """
+        Build metadata filters based on query understanding.
+
+        IMPORTANT:
+        At the moment our indexed chunks do not carry explicit ``domain`` or
+        ``is_current`` fields in their payloads. Filtering on fields that don't
+        exist in Qdrant effectively removes all candidate chunks, which makes
+        the assistant feel brittle (only very specific queries appear to work).
+
+        To maximise recall and make the system more forgiving to how users
+        phrase questions, we intentionally keep the default filters empty here.
+        When we start indexing these metadata fields, we can re‑enable
+        domain/recency filters in a controlled way.
+        """
+        return {}

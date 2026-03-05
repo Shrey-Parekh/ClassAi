@@ -23,7 +23,7 @@ class BGEReranker:
     BGE reranker reads query + chunk together for better relevance scoring.
     """
     
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
+    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
         """
         Initialize BGE reranker.
         

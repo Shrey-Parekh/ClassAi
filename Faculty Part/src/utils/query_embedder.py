@@ -1,5 +1,5 @@
 """
-Query embedding using BAAI/bge-large-en-v1.5.
+Query embedding using BAAI/bge-m3.
 
 Same model as document embeddings for semantic consistency.
 """
@@ -12,12 +12,12 @@ import torch
 
 class QueryEmbedder:
     """
-    Query embedding using BAAI/bge-large-en-v1.5.
+    Query embedding using BAAI/bge-m3.
     
     Matches document embedding model for semantic consistency.
     """
     
-    def __init__(self, model_name: str = "BAAI/bge-large-en-v1.5"):
+    def __init__(self, model_name: str = "BAAI/bge-m3"):
         """
         Initialize query embedder.
         
@@ -54,5 +54,5 @@ class QueryEmbedder:
             raise
     
     def get_dimension(self) -> int:
-        """Get embedding dimension (BAAI/bge-large-en-v1.5 = 1024)."""
+        """Get embedding dimension (BAAI/bge-m3 = 1024)."""
         return 1024

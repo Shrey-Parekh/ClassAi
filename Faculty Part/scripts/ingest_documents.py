@@ -59,13 +59,13 @@ def main():
         print("Initializing components...")
         vector_db = VectorDBClient(collection_name=args.collection)
         
-        # Initialize encoder (BAAI/bge-large-en-v1.5)
+        # Initialize encoder (BAAI/bge-m3)
         embedding_model = DualEncoderEmbeddings(
-            model_name="BAAI/bge-large-en-v1.5",
+            model_name="BAAI/bge-m3",
             log_file="embedding_log.jsonl"
         )
         
-        # Create collection with 1024 dimensions (BAAI/bge-large-en-v1.5)
+        # Create collection with 1024 dimensions (BAAI/bge-m3)
         vector_db.create_collection(
             collection_name=args.collection,
             vector_size=1024

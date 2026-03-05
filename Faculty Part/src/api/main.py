@@ -69,7 +69,7 @@ async def startup_event():
         print("Initializing Faculty Part RAG system...")
         
         vector_db = VectorDBClient()
-        query_embedder = QueryEmbedder(model_name="BAAI/bge-large-en-v1.5")
+        query_embedder = QueryEmbedder(model_name="BAAI/bge-m3")
         llm_client = LLMClient()
         
         # Create collection if it doesn't exist
@@ -80,7 +80,8 @@ async def startup_event():
         # Initialize retrieval pipeline
         retrieval_pipeline = RetrievalPipeline(
             vector_db_client=vector_db,
-            embedding_model=query_embedder
+            embedding_model=query_embedder,
+            llm_client=llm_client  # For HyDE in topic search
         )
         
         # Initialize answer generator

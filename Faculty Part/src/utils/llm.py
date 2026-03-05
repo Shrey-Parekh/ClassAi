@@ -54,19 +54,22 @@ class LLMClient:
         Args:
             prompt: Input prompt
             max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature (overrides default)
+            temperature: Sampling temperature (overrides default, recommended: 0.2 for factual responses)
         
         Returns:
             Generated text
         """
         url = f"{self.base_url}/api/generate"
         
+        # Use provided temperature or default
+        temp = temperature if temperature is not None else self.temperature
+        
         payload = {
             "model": self.model,
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": temperature or self.temperature,
+                "temperature": temp,
                 "num_predict": max_tokens,
             }
         }

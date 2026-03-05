@@ -2,12 +2,12 @@
 
 AI-powered faculty resource assistant using semantic RAG with intent-based retrieval.
 
-**Uses Ollama with Llama 2 - runs completely locally, no API keys needed!**
+**Uses Ollama with Gemma3 12B - runs completely locally, no API keys needed!**
 
 ## Prerequisites
 
 1. **Install Ollama**: https://ollama.ai/download
-2. **Pull Llama 2**: `ollama pull llama2`
+2. **Pull Gemma3 12B**: `ollama pull gemma3:12b`
 3. **Docker Desktop** for Qdrant
 
 See [OLLAMA_SETUP.md](./OLLAMA_SETUP.md) for detailed Ollama installation.
@@ -61,8 +61,9 @@ python -m src.api.main
 ## Core Features
 
 - **Semantic Chunking**: Procedures stay intact, rules keep conditions
-- **Intent-Based Retrieval**: Routes queries to optimal chunk levels  
-- **Hybrid Search**: Vector + BM25 keyword matching
+- **Intent-Based Weighting**: Dynamic dense/sparse weights based on query type
+- **Hybrid Search**: Vector (bge-m3) + SPLADE keyword matching
+- **Smart Prompt**: Adaptive formatting based on question complexity
 - **Grounded Answers**: LLM answers only from retrieved chunks
 
 Details: [docs/CHUNKING_STRATEGY.md](./docs/CHUNKING_STRATEGY.md)
