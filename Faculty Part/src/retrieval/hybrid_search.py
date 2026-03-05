@@ -60,7 +60,7 @@ class HybridSearchEngine:
         
         # Initialize sparse encoder
         try:
-            self.sparse_encoder = SparseEncoder(model_name="Splade")
+            self.sparse_encoder = SparseEncoder(model_name="prithivida/Splade_PP_en_v1")
         except Exception as e:
             self.logger.warning(f"Failed to initialize sparse encoder: {e}")
             self.sparse_encoder = None

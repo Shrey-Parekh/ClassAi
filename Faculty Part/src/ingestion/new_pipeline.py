@@ -70,7 +70,7 @@ class NewIngestionPipeline:
         # Initialize sparse encoder
         print("\n[4/4] Initializing sparse encoder...")
         try:
-            self.sparse_encoder = SparseEncoder(model_name="Splade")
+            self.sparse_encoder = SparseEncoder(model_name="prithivida/Splade_PP_en_v1")
             print("      ✓ Sparse encoder loaded")
         except Exception as e:
             print(f"      ⚠ Sparse encoder not available: {e}")

@@ -49,7 +49,7 @@ class VectorDBClient:
     def create_collection(
         self,
         collection_name: str = None,
-        vector_size: int = 768,  # nomic-embed-text default
+        vector_size: int = 768,
         distance: Distance = Distance.COSINE
     ):
         """
@@ -57,7 +57,7 @@ class VectorDBClient:
         
         Args:
             collection_name: Name of collection to create
-            vector_size: Dimension of vectors (768 for nomic-embed-text)
+            vector_size: Dimension of vectors
             distance: Distance metric (COSINE, EUCLID, DOT)
         """
         collection_name = collection_name or self.collection_name
@@ -114,7 +114,7 @@ class VectorDBClient:
         score_threshold: float = None
     ) -> List[Any]:
         """
-        Search for similar vectors.
+        Search for similar vectors using qdrant-client 1.9.0 API.
         
         Args:
             collection_name: Collection to search
@@ -131,13 +131,14 @@ class VectorDBClient:
         if query_filter:
             qdrant_filter = self._build_filter(query_filter)
         
-        results = self.client.query_points(
+        # Use search() method for qdrant-client 1.9.0
+        results = self.client.search(
             collection_name=collection_name,
-            query=query_vector,
+            query_vector=query_vector,
             limit=limit,
             query_filter=qdrant_filter,
             score_threshold=score_threshold
-        ).points
+        )
         
         return results
     

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 from dotenv import load_dotenv
+import json
 
 # Load environment variables
 load_dotenv()
@@ -107,13 +108,14 @@ async def root():
 @app.post("/query", response_model=QueryResponse)
 async def query_faculty_resources(request: QueryRequest):
     """
-    Query faculty resources using semantic RAG.
+    Query faculty resources using semantic RAG with structured JSON output.
     
     Pipeline:
     1. Intent classification
-    2. Hybrid search (vector + BM25)
+    2. Hybrid search (vector + sparse)
     3. Cross-encoder reranking
-    4. LLM answer generation
+    4. Intent-based chunk limiting
+    5. Structured JSON generation
     """
     if not retrieval_pipeline or not answer_generator:
         raise HTTPException(
@@ -122,13 +124,14 @@ async def query_faculty_resources(request: QueryRequest):
         )
     
     try:
-        # Retrieve relevant chunks
+        # Retrieve relevant chunks (returns top 15 after reranking)
         retrieval_result = retrieval_pipeline.retrieve(
             query=request.query,
-            top_k=request.top_k
+            top_k=15  # Increased from 5 to utilize full reranked results
         )
         
-        # Generate answer
+        # Generate structured JSON answer
+        # Answer generator will apply intent-based chunk limiting
         answer_result = answer_generator.generate(
             query=request.query,
             retrieved_chunks=retrieval_result["chunks"],
@@ -136,14 +139,15 @@ async def query_faculty_resources(request: QueryRequest):
         )
         
         return QueryResponse(
-            answer=answer_result["answer"],
+            answer=json.dumps(answer_result["structured"]),  # Serialize for response
             sources=answer_result["sources"],
             intent=retrieval_result["intent"],
             chunks_used=answer_result["chunks_used"],
             metadata={
                 **retrieval_result["metadata"],
                 "domain": retrieval_result.get("domain", "general"),
-                "entities": retrieval_result.get("entities", [])
+                "entities": retrieval_result.get("entities", []),
+                "structured": answer_result["structured"]  # Include structured data
             }
         )
     

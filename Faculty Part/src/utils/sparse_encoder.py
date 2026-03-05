@@ -16,12 +16,12 @@ class SparseEncoder:
     Replaces the old BM25 index with native sparse vector support.
     """
     
-    def __init__(self, model_name: str = "Splade"):
+    def __init__(self, model_name: str = "prithivida/Splade_PP_en_v1"):
         """
         Initialize sparse encoder.
         
         Args:
-            model_name: FastEmbed model name (default: Splade)
+            model_name: FastEmbed model name (default: prithivida/Splade_PP_en_v1)
         """
         try:
             from fastembed import SparseTextEmbedding
@@ -52,15 +52,21 @@ class SparseEncoder:
             Dict mapping token indices to weights
         """
         try:
-            # FastEmbed returns sparse vectors as dict
-            sparse_vector = self.model.query(text)
+            # FastEmbed 0.4.0 uses query_embed() for query encoding
+            sparse_vectors = list(self.model.query_embed([text]))
             
-            # Convert to Qdrant format (dict of index -> weight)
-            if isinstance(sparse_vector, dict):
-                return sparse_vector
+            if sparse_vectors:
+                sparse_vector = sparse_vectors[0]
+                
+                # Convert to Qdrant format (dict of index -> weight)
+                if hasattr(sparse_vector, 'indices') and hasattr(sparse_vector, 'values'):
+                    return dict(zip(sparse_vector.indices.tolist(), sparse_vector.values.tolist()))
+                elif isinstance(sparse_vector, dict):
+                    return sparse_vector
+                else:
+                    self.logger.warning(f"Unexpected sparse vector format: {type(sparse_vector)}")
+                    return {}
             else:
-                # Handle if it returns a different format
-                self.logger.warning(f"Unexpected sparse vector format: {type(sparse_vector)}")
                 return {}
         
         except Exception as e:

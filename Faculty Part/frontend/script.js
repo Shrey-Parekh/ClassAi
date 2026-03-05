@@ -100,8 +100,22 @@ function addMessage(content, isUser, sources = null, animate = false) {
         
         typeMessage(contentDiv, content, sources, thinkingDiv);
     } else {
-        const formattedContent = formatContent(content);
-        contentDiv.innerHTML = formattedContent;
+        // Render structured JSON response for assistant messages
+        if (!isUser) {
+            try {
+                // Parse structured response from metadata or content
+                const structured = typeof content === 'string' ? JSON.parse(content) : content;
+                const rendered = renderer.render(structured);
+                contentDiv.appendChild(rendered);
+                contentDiv.classList.add('assistant-message');
+            } catch (e) {
+                // Fallback to plain text if JSON parse fails
+                console.error('Failed to parse structured response:', e);
+                contentDiv.textContent = typeof content === 'string' ? content : JSON.stringify(content);
+            }
+        } else {
+            contentDiv.textContent = content;
+        }
         
         // Add sources if available
         if (sources && sources.length > 0) {
@@ -114,47 +128,34 @@ function addMessage(content, isUser, sources = null, animate = false) {
     return messageDiv;
 }
 
-// ChatGPT-style typing animation
-async function typeMessage(contentDiv, text, sources = null, thinkingDiv = null) {
+// ChatGPT-style typing animation for structured responses
+async function typeMessage(contentDiv, content, sources = null, thinkingDiv = null) {
     // Remove thinking indicator
     if (thinkingDiv) {
         thinkingDiv.remove();
     }
     
-    const formattedText = formatContent(text);
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = formattedText;
-    
-    // Extract text content while preserving structure
-    const textContent = tempDiv.textContent || tempDiv.innerText;
-    
-    let displayedText = '';
-    const typingSpeed = 15; // milliseconds per character
-    
-    for (let i = 0; i < textContent.length; i++) {
-        displayedText += textContent[i];
+    try {
+        // Parse structured response
+        const structured = typeof content === 'string' ? JSON.parse(content) : content;
         
-        // Format and display
-        const formatted = formatContent(displayedText);
-        contentDiv.innerHTML = formatted;
+        // Render immediately (typing animation doesn't work well with structured content)
+        const rendered = renderer.render(structured);
+        contentDiv.appendChild(rendered);
+        contentDiv.classList.add('assistant-message');
         
         // Scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
         
-        // Variable speed for natural feel
-        const delay = textContent[i] === '.' || textContent[i] === '!' || textContent[i] === '?' 
-            ? typingSpeed * 8 
-            : textContent[i] === ',' 
-            ? typingSpeed * 4 
-            : typingSpeed;
-        
-        await new Promise(resolve => setTimeout(resolve, delay));
-    }
-    
-    // Add sources after typing completes
-    if (sources && sources.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 300));
-        addSources(contentDiv, sources);
+        // Add sources after rendering
+        if (sources && sources.length > 0) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            addSources(contentDiv, sources);
+        }
+    } catch (e) {
+        // Fallback to plain text
+        console.error('Failed to parse structured response in typing:', e);
+        contentDiv.textContent = typeof content === 'string' ? content : JSON.stringify(content);
     }
 }
 
@@ -313,8 +314,11 @@ async function sendQuery(query) {
         loadingMessage.remove();
         stopThinking();
         
-        // Add assistant response with typing animation
-        addMessage(data.answer, false, data.sources, true);
+        // Extract structured response from metadata
+        const structured = data.metadata?.structured || JSON.parse(data.answer);
+        
+        // Add assistant response with structured rendering
+        addMessage(structured, false, data.sources, true);
         
     } catch (error) {
         loadingMessage.remove();
