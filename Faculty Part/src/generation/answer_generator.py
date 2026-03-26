@@ -49,13 +49,81 @@ class AnswerGenerator:
     - Validates JSON against Pydantic schema
     - Returns clean fallback on parse failures
     - Temperature set to 0.1 for JSON consistency
-    - Intent-based chunk limiting for optimal context usage
+    - Dynamic token-based chunk limiting for optimal context usage
     """
+    
+    # Context window allocation (16K total)
+    MAX_CONTEXT_TOKENS = 16384
+    SYSTEM_PROMPT_TOKENS = 500  # Prompt template overhead
+    OUTPUT_TOKENS = 2000  # Reserve for LLM response
+    AVAILABLE_FOR_CHUNKS = MAX_CONTEXT_TOKENS - SYSTEM_PROMPT_TOKENS - OUTPUT_TOKENS  # ~13.8K
     
     def __init__(self, llm_client):
         """Initialize with LLM client (Ollama)."""
         self.llm = llm_client
         self.logger = logging.getLogger(__name__)
+    
+    def _estimate_tokens(self, text: str) -> int:
+        """Estimate token count (1 token ≈ 4 chars for English)."""
+        return len(text) // 4
+    
+    def _select_chunks_by_tokens(
+        self,
+        chunks: List[Dict[str, Any]],
+        intent_type: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Select chunks dynamically based on token budget and relevance.
+        
+        Strategy:
+        1. Sort by relevance score (already done by reranker)
+        2. Add chunks until token budget exhausted
+        3. Prioritize high-relevance chunks
+        4. Stop when budget reached or quality drops
+        
+        Args:
+            chunks: Retrieved chunks sorted by relevance
+            intent_type: Query intent
+        
+        Returns:
+            Selected chunks that fit in context window
+        """
+        selected = []
+        total_tokens = 0
+        
+        # Get intent-specific max chunks as upper bound
+        max_chunks = INTENT_CHUNK_LIMITS.get(intent_type.lower(), DEFAULT_CHUNK_LIMIT)
+        
+        for i, chunk in enumerate(chunks):
+            # Stop if we've hit max chunks
+            if i >= max_chunks:
+                break
+            
+            # Estimate tokens for this chunk
+            chunk_text = chunk.get("content", "")
+            chunk_tokens = self._estimate_tokens(chunk_text)
+            
+            # Check if adding this chunk would exceed budget
+            if total_tokens + chunk_tokens > self.AVAILABLE_FOR_CHUNKS:
+                self.logger.info(f"Token budget exhausted at chunk {i+1}/{len(chunks)}")
+                break
+            
+            # Quality threshold: stop if relevance drops too low
+            # Reranker scores are typically 0-1, stop if < 0.3
+            score = chunk.get("score", 1.0)
+            if i > 5 and score < 0.3:  # After first 5, enforce quality threshold
+                self.logger.info(f"Quality threshold not met at chunk {i+1} (score: {score:.3f})")
+                break
+            
+            selected.append(chunk)
+            total_tokens += chunk_tokens
+        
+        self.logger.info(
+            f"Selected {len(selected)}/{len(chunks)} chunks, "
+            f"~{total_tokens} tokens (~{(total_tokens/self.AVAILABLE_FOR_CHUNKS)*100:.1f}% of budget)"
+        )
+        
+        return selected
     
     def generate(
         self,
@@ -68,25 +136,24 @@ class AnswerGenerator:
         
         Args:
             query: Original faculty query
-            retrieved_chunks: Top-k chunks from retrieval pipeline
+            retrieved_chunks: Top-k chunks from retrieval pipeline (sorted by relevance)
             intent_type: Detected intent
         
         Returns:
             Dict with structured response, sources, and metadata
         """
-        # Determine chunk limit based on intent
-        chunk_limit = INTENT_CHUNK_LIMITS.get(intent_type.lower(), DEFAULT_CHUNK_LIMIT)
+        # Select chunks dynamically based on token budget and relevance
+        chunks_to_use = self._select_chunks_by_tokens(retrieved_chunks, intent_type)
         
-        # Limit chunks to intent-specific amount
-        chunks_to_use = retrieved_chunks[:chunk_limit]
-        
-        print(f"=== CHUNK LIMITING ===")
+        print(f"=== DYNAMIC CHUNK SELECTION ===")
         print(f"Intent: {intent_type}")
         print(f"Chunks available: {len(retrieved_chunks)}")
-        print(f"Chunks using: {len(chunks_to_use)} (limit: {chunk_limit})")
-        print("=== END LIMITING ===")
+        print(f"Chunks selected: {len(chunks_to_use)}")
+        if chunks_to_use:
+            print(f"Score range: {chunks_to_use[0].get('score', 0):.3f} - {chunks_to_use[-1].get('score', 0):.3f}")
+        print("=== END SELECTION ===")
         
-        # Build context from chunks
+        # Build context from selected chunks
         context = self._build_context(chunks_to_use)
         
         # Get JSON prompt for intent
@@ -119,11 +186,19 @@ class AnswerGenerator:
         # Extract sources
         sources = self._extract_sources(chunks_to_use)
         
+        # Calculate confidence
+        confidence = self._calculate_confidence(chunks_to_use, structured)
+        
+        # Log context usage
+        self._log_context_usage(query, chunks_to_use, estimated_context_tokens)
+        
         return {
             "structured": structured.dict(),
             "sources": sources,
             "chunks_used": len(chunks_to_use),
             "intent": intent_type,
+            "confidence": confidence,
+            "tokens_used": estimated_context_tokens
         }
     
     def _parse_json_response(
@@ -255,9 +330,9 @@ class AnswerGenerator:
     
     def _build_context(self, chunks: List[Dict[str, Any]]) -> str:
         """
-        Build context string from retrieved chunks.
+        Build numbered context string from retrieved chunks for citation tracking.
         
-        Organizes chunks with document boundaries for clarity.
+        Each chunk is numbered [1], [2], etc. for citation in the response.
         """
         context_parts = []
         
@@ -266,11 +341,11 @@ class AnswerGenerator:
             content = chunk.get("metadata", {}).get("text", "")
             doc_title = chunk.get("metadata", {}).get("title", "Unknown Document")
             
-            # Wrap content with source for clarity
-            wrapped = f"[Source {i}: {doc_title}]\n{content}"
-            context_parts.append(wrapped)
+            # Number chunk for citation
+            numbered = f"[{i}] {content}"
+            context_parts.append(numbered)
         
-        return "\n\n---\n\n".join(context_parts)
+        return "\n\n".join(context_parts)
     
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """Extract source document information from chunks."""
@@ -291,3 +366,87 @@ class AnswerGenerator:
                 seen_docs.add(doc_id)
         
         return sources
+
+    
+    def _calculate_confidence(
+        self,
+        chunks: List[Dict[str, Any]],
+        structured: Any
+    ) -> str:
+        """
+        Calculate confidence level based on chunk scores and answer quality.
+        
+        Args:
+            chunks: Retrieved chunks with scores
+            structured: Parsed structured response
+        
+        Returns:
+            Confidence level: "high", "medium", "low", or "none"
+        """
+        if not chunks:
+            return "none"
+        
+        # Get top chunk score
+        top_score = chunks[0].get("score", 0.0)
+        
+        # Get number of chunks used
+        num_chunks = len(chunks)
+        
+        # Check if answer has content
+        has_content = False
+        if hasattr(structured, 'sections') and structured.sections:
+            has_content = True
+        elif hasattr(structured, 'fallback') and structured.fallback:
+            return "none"
+        
+        # Calculate confidence based on multiple factors
+        if top_score >= 0.7 and num_chunks >= 3 and has_content:
+            return "high"
+        elif top_score >= 0.4 and num_chunks >= 2 and has_content:
+            return "medium"
+        elif top_score >= 0.3 and has_content:
+            return "low"
+        else:
+            return "none"
+
+    
+    def _log_context_usage(
+        self,
+        query: str,
+        chunks: List[Dict[str, Any]],
+        tokens_used: int
+    ) -> None:
+        """
+        Log context usage to file for analysis.
+        
+        Args:
+            query: Original query
+            chunks: Chunks used
+            tokens_used: Estimated tokens used
+        """
+        import json
+        from datetime import datetime
+        from pathlib import Path
+        
+        try:
+            # Create logs directory
+            log_dir = Path("logs")
+            log_dir.mkdir(exist_ok=True)
+            
+            # Append to log file
+            log_file = log_dir / "context_usage.jsonl"
+            
+            log_entry = {
+                "timestamp": datetime.utcnow().isoformat(),
+                "query": query[:100],  # Truncate for privacy
+                "chunks_used": len(chunks),
+                "tokens_used": tokens_used,
+                "tokens_available": self.AVAILABLE_FOR_CHUNKS,
+                "utilization": tokens_used / self.AVAILABLE_FOR_CHUNKS
+            }
+            
+            with open(log_file, 'a') as f:
+                f.write(json.dumps(log_entry) + '\n')
+        
+        except Exception as e:
+            self.logger.debug(f"Failed to log context usage: {e}")

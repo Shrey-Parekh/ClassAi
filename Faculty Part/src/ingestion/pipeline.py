@@ -8,7 +8,7 @@ import json
 import hashlib
 
 from .document_processor import DocumentProcessor
-from ..chunking.semantic_chunker import SemanticChunker
+from ..chunking.document_chunker import DocumentChunker
 from ..utils.chunk_preprocessor import ChunkPreprocessor
 from ..utils.dual_encoder_embeddings import DualEncoderEmbeddings
 
@@ -40,10 +40,10 @@ class IngestionPipeline:
             vector_db_client: Vector database client
             embedding_model: Model for generating embeddings (can be DualEncoderEmbeddings)
             collection_name: Target collection name
-            llm_client: Optional LLM client for semantic chunking
+            llm_client: Optional LLM client (unused, kept for compatibility)
         """
         self.doc_processor = DocumentProcessor()
-        self.chunker = SemanticChunker(llm_client=llm_client)
+        self.chunker = DocumentChunker()
         self.preprocessor = ChunkPreprocessor()
         self.vector_db = vector_db_client
         self.embedding_model = embedding_model
@@ -72,7 +72,8 @@ class IngestionPipeline:
         
         # Step 2: Semantic chunking
         chunks = self.chunker.chunk_document(
-            content=processed["content"],
+            text=processed["content"],
+            filepath=file_path,
             doc_metadata=processed["metadata"]
         )
         
@@ -80,7 +81,7 @@ class IngestionPipeline:
         preprocessed_data = []
         for i, chunk in enumerate(chunks):
             try:
-                preprocessed_chunks = self.preprocessor.preprocess(chunk.content)
+                preprocessed_chunks = self.preprocessor.preprocess(chunk.text)
                 
                 for pre_chunk in preprocessed_chunks:
                     if pre_chunk.is_valid:

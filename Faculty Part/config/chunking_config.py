@@ -45,19 +45,20 @@ TOP_K_RERANKED = 15  # After cross-encoder reranking (increased from 5)
 
 # Intent-based chunk limits for LLM context
 # These determine how many chunks to send to the LLM based on query intent
+# With 16K context window, we can use ~8K for chunks (rest for prompt/response)
 INTENT_CHUNK_LIMITS = {
-    "lookup": 3,           # Person lookup - just 1-2 profiles
-    "person_lookup": 3,    # Alias for lookup
-    "department_list": 20, # Entire department listing
-    "topic_search": 15,    # Broad topic coverage
-    "procedure": 10,       # Policy + forms + guidelines
-    "eligibility": 8,      # Policy sections
-    "salary_benefits": 8,  # Salary/benefits sections
-    "general": 12,         # Broad context for general queries
+    "lookup": 8,           # Person lookup - profile + publications
+    "person_lookup": 8,    # Alias for lookup
+    "department_list": 30, # Entire department listing
+    "topic_search": 25,    # Broad topic coverage
+    "procedure": 20,       # Policy + forms + guidelines + examples
+    "eligibility": 15,     # Policy sections with conditions
+    "salary_benefits": 15, # Salary/benefits sections
+    "general": 20,         # Broad context for general queries
 }
 
 # Default chunk limit if intent not in map
-DEFAULT_CHUNK_LIMIT = 10
+DEFAULT_CHUNK_LIMIT = 20
 
 # Intent-to-level routing
 INTENT_TO_CHUNK_LEVELS: Dict[IntentType, list[ChunkLevel]] = {

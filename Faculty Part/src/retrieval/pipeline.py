@@ -166,12 +166,50 @@ class RetrievalPipeline:
             top_k=top_k_rerank
         )
         
+        # Step 8: Check confidence - trigger second pass if needed
+        if reranked_results and reranked_results[0].score < 0.4:
+            self.logger.info(f"Low confidence ({reranked_results[0].score:.3f}), triggering second pass")
+            
+            # Extract signal terms and retry
+            signal_terms = self._extract_signal_terms(query_clean, understanding.entities)
+            if signal_terms:
+                self.logger.info(f"Second pass with signal terms: {signal_terms}")
+                
+                # Re-run hybrid search with signal terms only
+                signal_query = " ".join(signal_terms)
+                signal_embedding = self.embedding_model.embed(signal_query)
+                
+                second_search_results = self.search_engine.search(
+                    original_query=signal_query,
+                    expanded_query=signal_query,
+                    query_embedding=signal_embedding,
+                    top_k=top_k_search,
+                    filters=understanding.metadata_filters,
+                    intent=understanding.intent
+                )
+                
+                second_reranked = self.reranker.rerank(
+                    query=signal_query,
+                    results=second_search_results,
+                    top_k=top_k_rerank
+                )
+                
+                # Use second pass if better
+                if second_reranked and second_reranked[0].score > reranked_results[0].score:
+                    self.logger.info(f"Second pass improved score: {second_reranked[0].score:.3f}")
+                    reranked_results = second_reranked
+                
+                # If still low confidence, return no-confidence response
+                if reranked_results[0].score < 0.4:
+                    self.logger.info("Both passes failed, returning no-confidence response")
+                    return self._generate_no_confidence_response(query, understanding.intent)
+        
         # Format results
         chunks = [
             {
                 "chunk_id": result.chunk_id,
                 "content": result.content,
-                "score": result.relevance_score,
+                "score": result.score,
                 "metadata": result.metadata,
             }
             for result in reranked_results
@@ -283,3 +321,75 @@ Write only the sentence, nothing else."""
             return []
         
         return []
+
+    
+    def _extract_signal_terms(self, query: str, entities: List[str]) -> List[str]:
+        """
+        Extract 2-3 highest-signal nouns/entities from query.
+        
+        Used for second-pass retrieval when first pass has low confidence.
+        """
+        signal_terms = []
+        
+        if entities:
+            signal_terms.extend(entities[:2])
+        
+        # Extract nouns (capitalized or long words)
+        words = query.split()
+        potential_nouns = [
+            word for word in words
+            if (len(word) > 4 and word[0].isupper()) or len(word) > 6
+        ]
+        
+        for noun in potential_nouns:
+            if noun.lower() not in [t.lower() for t in signal_terms]:
+                signal_terms.append(noun)
+                if len(signal_terms) >= 3:
+                    break
+        
+        return signal_terms[:3]
+    
+    def _generate_no_confidence_response(self, query: str, intent: str) -> Dict[str, Any]:
+        """Generate no-confidence response with reformulation suggestions."""
+        suggestions = []
+        
+        if intent == "lookup":
+            suggestions = [
+                "Try using the full name (e.g., 'Dr. John Smith')",
+                "Include the department name",
+                "Check the spelling of the name"
+            ]
+        elif intent == "procedure":
+            suggestions = [
+                "Be more specific about which procedure",
+                "Include the document or policy name",
+                "Try using keywords like 'application', 'form', or 'process'"
+            ]
+        elif intent == "eligibility":
+            suggestions = [
+                "Specify what you want to be eligible for",
+                "Include relevant details (years of service, role, etc.)",
+                "Try rephrasing as 'What are the requirements for...'"
+            ]
+        else:
+            suggestions = [
+                "Try being more specific",
+                "Include relevant keywords or document names",
+                "Rephrase your question differently"
+            ]
+        
+        return {
+            "chunks": [],
+            "intent": intent,
+            "domain": "general",
+            "entities": [],
+            "metadata": {
+                "retrieval_path": "no_confidence",
+                "initial_results": 0,
+                "final_results": 0,
+                "filters_applied": {},
+                "is_current_only": False,
+                "name_boost_applied": False,
+                "reformulation_suggestions": suggestions
+            }
+        }

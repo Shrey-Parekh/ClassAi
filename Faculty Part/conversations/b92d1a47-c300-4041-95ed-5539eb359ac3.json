@@ -1,0 +1,41 @@
+{
+  "session_id": "b92d1a47-c300-4041-95ed-5539eb359ac3",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What is NMIMS?",
+      "timestamp": "2026-03-26T16:57:09.030354",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"What is NMIMS?\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"Narsee Monjee Institute of Management Studies (NMIMS) was founded in 1981 under the aegis of the Vile Parle Kelavani Mandal (VPKM). It is a multi-disciplinary, multi-campus deemed-to-be university with a national and international presence. NMIMS was granted deemed university status in 2003 and is accredited with the highest grade of A++ by NAAC.\"}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-26T16:57:09.031354",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T16:57:09.030354",
+  "updated_at": "2026-03-26T16:57:09.031354"
+}

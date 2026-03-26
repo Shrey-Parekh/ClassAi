@@ -54,10 +54,10 @@ def main():
     print("\n" + "="*70)
     print(" "*20 + "FACULTY RAG INGESTION")
     print("="*70)
-    print(f"\n📂 Input directory: {args.input}")
-    print(f"📋 Metadata file:   {args.metadata if args.metadata else 'None'}")
-    print(f"🗄️  Collection:      {args.collection}")
-    print(f"🤖 Model:           BAAI/bge-m3 (1024 dimensions)")
+    print(f"\nInput directory: {args.input}")
+    print(f" Metadata file:   {args.metadata if args.metadata else 'None'}")
+    print(f"  Collection:      {args.collection}")
+    print(f" Model:           BAAI/bge-m3 (1024 dimensions)")
     
     try:
         # Initialize vector DB

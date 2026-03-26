@@ -413,6 +413,35 @@ class QueryAnalyzer:
         query_lower = query_clean.lower()
         expansion_terms = []
         
+        # Detect vague/broad queries and expand aggressively
+        vague_indicators = [
+            "what should i know", "what do i need", "tell me about",
+            "what are", "list", "overview", "summary", "all",
+            "important", "key", "main", "essential"
+        ]
+        
+        is_vague = any(indicator in query_lower for indicator in vague_indicators)
+        
+        # Form query rewriting: redirect to procedure context
+        form_pattern = r'\b(?:form|application)\s+([A-Z]{1,3}-?\d{1,3})\b'
+        form_match = re.search(form_pattern, query_clean, re.IGNORECASE)
+        
+        if form_match and any(word in query_lower for word in ["fill", "filling", "complete", "how to", "instructions", "fields"]):
+            # User asking how to fill a form - rewrite to search for the procedure
+            form_name = form_match.group(0)
+            # Extract the procedure context from common patterns
+            if "leave" in query_lower:
+                expansion_terms.extend(["leave", "application", "process", "procedure", form_name, "submit", "approval"])
+            elif "reimbursement" in query_lower or "claim" in query_lower:
+                expansion_terms.extend(["reimbursement", "claim", "process", "procedure", form_name, "submit", "approval"])
+            elif "travel" in query_lower:
+                expansion_terms.extend(["travel", "process", "procedure", form_name, "submit", "approval"])
+            elif "grant" in query_lower or "research" in query_lower:
+                expansion_terms.extend(["grant", "research", "process", "procedure", form_name, "submit", "approval"])
+            else:
+                # Generic form query - search for procedure that uses this form
+                expansion_terms.extend(["process", "procedure", "application", form_name, "submit", "approval", "steps"])
+        
         # Intent-based expansion
         if intent == "procedure":
             expansion_terms.extend(["steps", "process", "procedure", "documents", "approval", "requirements", "application", "submit", "form"])
@@ -440,6 +469,37 @@ class QueryAnalyzer:
             if any(word in query_lower for word in ["award", "achievement", "recognition", "honor"]):
                 expansion_terms.extend(["awards", "achievements", "recognition", "honors", "prizes"])
         
+        # Aggressive expansion for vague queries
+        if is_vague:
+            # Add domain-specific terms based on keywords
+            if "form" in query_lower:
+                expansion_terms.extend([
+                    "form", "forms", "application", "applications", "template", "templates",
+                    "document", "documents", "submission", "submit", "fill", "complete",
+                    "leave", "reimbursement", "travel", "research", "grant", "approval",
+                    "request", "requisition", "claim", "declaration"
+                ])
+            
+            if "policy" in query_lower or "policies" in query_lower:
+                expansion_terms.extend([
+                    "policy", "policies", "rule", "rules", "regulation", "regulations",
+                    "guideline", "guidelines", "procedure", "procedures", "requirement", "requirements"
+                ])
+            
+            if "leave" in query_lower:
+                expansion_terms.extend([
+                    "leave", "leaves", "vacation", "absence", "casual", "medical", "earned",
+                    "maternity", "paternity", "sabbatical", "duty", "compensatory"
+                ])
+            
+            # General broad query expansion
+            if len(expansion_terms) < 5:
+                expansion_terms.extend([
+                    "faculty", "staff", "employee", "teacher", "professor",
+                    "policy", "procedure", "guideline", "rule", "requirement",
+                    "form", "application", "document", "process", "step"
+                ])
+        
         # Synonym-based expansion
         for key, synonyms in self.synonyms.items():
             if key in query_lower:
@@ -450,8 +510,14 @@ class QueryAnalyzer:
         query_words = set(query_lower.split())
         expansion_terms = [term for term in set(expansion_terms) if term.lower() not in query_words]
         
-        # Limit expansion to avoid over-expansion (max 10 terms for faculty queries, 8 for others)
-        max_terms = 10 if "faculty" in expansion_terms or "professor" in expansion_terms else 8
+        # Limit expansion based on query type
+        if is_vague:
+            max_terms = 20  # More terms for vague queries
+        elif "faculty" in expansion_terms or "professor" in expansion_terms:
+            max_terms = 10  # Faculty queries
+        else:
+            max_terms = 8  # Specific queries
+        
         expansion_terms = expansion_terms[:max_terms]
         
         if expansion_terms:

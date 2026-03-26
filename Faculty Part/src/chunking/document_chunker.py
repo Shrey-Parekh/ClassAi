@@ -20,6 +20,8 @@ class Chunk:
     metadata: Dict[str, Any]
     char_count: int
     token_count: int
+    chunk_level: str = "section"  # Default: "overview" | "section" | "atomic"
+    chunk_id: str = ""  # Generated unique ID
 
 
 class DocumentChunker:
@@ -31,7 +33,15 @@ class DocumentChunker:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
-        self.seen_hashes = set()  # For duplicate detection
+        # Document-scoped deduplication: reset by creating new chunker per document
+        self.seen_hashes = set()
+    
+    def _generate_chunk_id(self, filepath: Path, index: int, sub_index: int = None) -> str:
+        """Generate unique chunk ID from document name and position."""
+        base = f"{filepath.stem}_chunk_{index}"
+        if sub_index is not None:
+            base += f"_{sub_index}"
+        return base
     
     def detect_source_type(self, filepath: Path) -> str:
         """
@@ -78,31 +88,39 @@ class DocumentChunker:
         """
         Main entry point: chunk document based on detected type.
         
+        After type-specific chunking, assigns chunk levels (overview/section/atomic)
+        based on position and content characteristics.
+        
         Args:
             text: Full document text
             filepath: Path to source file
             doc_metadata: Document-level metadata
         
         Returns:
-            List of chunks with metadata
+            List of chunks with metadata and level labels
         """
         source_type = self.detect_source_type(filepath)
         self.logger.info(f"Chunking {filepath.name} as {source_type}")
         
         if source_type == "faculty_profile":
-            return self._chunk_faculty_profile(text, filepath, doc_metadata)
+            chunks = self._chunk_faculty_profile(text, filepath, doc_metadata)
         elif source_type == "hr_policy":
-            return self._chunk_hr_policy(text, filepath, doc_metadata)
+            chunks = self._chunk_hr_policy(text, filepath, doc_metadata)
         elif source_type == "legal_document":
-            return self._chunk_legal_document(text, filepath, doc_metadata)
+            chunks = self._chunk_legal_document(text, filepath, doc_metadata)
         elif source_type == "guidelines":
-            return self._chunk_guidelines(text, filepath, doc_metadata)
+            chunks = self._chunk_guidelines(text, filepath, doc_metadata)
         elif source_type == "procedure_document":
-            return self._chunk_procedure(text, filepath, doc_metadata)
+            chunks = self._chunk_procedure(text, filepath, doc_metadata)
         elif source_type == "form_document":
-            return self._chunk_form(text, filepath, doc_metadata)
+            chunks = self._chunk_form(text, filepath, doc_metadata)
         else:
-            return self._chunk_general(text, filepath, doc_metadata)
+            chunks = self._chunk_general(text, filepath, doc_metadata)
+        
+        # Assign chunk levels after type-specific chunking
+        chunks = self._assign_chunk_levels(chunks, text)
+        
+        return chunks
     
     # ========== FACULTY PROFILE CHUNKING ==========
     
@@ -140,7 +158,8 @@ class DocumentChunker:
                     text=profile_text,
                     metadata=metadata,
                     char_count=len(profile_text),
-                    token_count=token_count
+                    token_count=token_count,
+                    chunk_id=self._generate_chunk_id(filepath, 0)
                 ))
             else:
                 # Split into 2 chunks: Bio + Publications
@@ -250,13 +269,15 @@ class DocumentChunker:
                 text=chunk_a,
                 metadata=metadata_a,
                 char_count=len(chunk_a),
-                token_count=self._count_tokens(chunk_a)
+                token_count=self._count_tokens(chunk_a),
+                chunk_id=self._generate_chunk_id(filepath, 0, 0)
             ),
             Chunk(
                 text=chunk_b,
                 metadata=metadata_b,
                 char_count=len(chunk_b),
-                token_count=self._count_tokens(chunk_b)
+                token_count=self._count_tokens(chunk_b),
+                chunk_id=self._generate_chunk_id(filepath, 0, 1)
             )
         ]
     
@@ -271,8 +292,10 @@ class DocumentChunker:
         """
         Chunk HR policy documents by section.
         Max 2000 tokens, 200 token overlap.
+        
+        Detects form references and tags chunks accordingly.
         """
-        return self._chunk_by_sections(
+        chunks = self._chunk_by_sections(
             text=text,
             filepath=filepath,
             doc_metadata=doc_metadata,
@@ -281,6 +304,22 @@ class DocumentChunker:
             max_tokens=2000,
             overlap_tokens=200
         )
+        
+        # Detect and tag form references in chunks
+        # Broader pattern to catch Annexures, Proformas, and descriptive references
+        coded_pattern = r'\b(?:form|application|annexure|proforma)\s+[A-Za-z]{0,3}-?\d{1,3}\b'
+        descriptive_pattern = r'\b(?:application form|prescribed form|requisite form|relevant form)\b'
+        
+        for chunk in chunks:
+            form_matches = re.findall(coded_pattern, chunk.text, re.IGNORECASE)
+            descriptive_matches = re.findall(descriptive_pattern, chunk.text, re.IGNORECASE)
+            all_forms = form_matches + descriptive_matches
+            
+            if all_forms:
+                chunk.metadata["has_forms"] = True
+                chunk.metadata["form_references"] = list(set(all_forms))
+        
+        return chunks
     
     # ========== LEGAL DOCUMENT CHUNKING ==========
     
@@ -315,8 +354,10 @@ class DocumentChunker:
         """
         Chunk guidelines and handbooks by topic.
         Max 2500 tokens, 250 token overlap.
+        
+        Detects form references and tags chunks accordingly.
         """
-        return self._chunk_by_sections(
+        chunks = self._chunk_by_sections(
             text=text,
             filepath=filepath,
             doc_metadata=doc_metadata,
@@ -325,6 +366,22 @@ class DocumentChunker:
             max_tokens=2500,
             overlap_tokens=250
         )
+        
+        # Detect and tag form references in chunks
+        # Broader pattern to catch Annexures, Proformas, and descriptive references
+        coded_pattern = r'\b(?:form|application|annexure|proforma)\s+[A-Za-z]{0,3}-?\d{1,3}\b'
+        descriptive_pattern = r'\b(?:application form|prescribed form|requisite form|relevant form)\b'
+        
+        for chunk in chunks:
+            form_matches = re.findall(coded_pattern, chunk.text, re.IGNORECASE)
+            descriptive_matches = re.findall(descriptive_pattern, chunk.text, re.IGNORECASE)
+            all_forms = form_matches + descriptive_matches
+            
+            if all_forms:
+                chunk.metadata["has_forms"] = True
+                chunk.metadata["form_references"] = list(set(all_forms))
+        
+        return chunks
     
     # ========== PROCEDURE CHUNKING ==========
     
@@ -337,8 +394,10 @@ class DocumentChunker:
         """
         Chunk procedure documents - keep procedures complete.
         Max 3000 tokens, 300 token overlap.
+        
+        Detects form references and tags chunks accordingly.
         """
-        return self._chunk_by_sections(
+        chunks = self._chunk_by_sections(
             text=text,
             filepath=filepath,
             doc_metadata=doc_metadata,
@@ -347,6 +406,20 @@ class DocumentChunker:
             max_tokens=3000,
             overlap_tokens=300
         )
+        
+        # Detect and tag form references in chunks
+        # Broader pattern to catch Annexures, Proformas, and descriptive references
+        coded_pattern = r'\b(?:form|application|annexure|proforma)\s+[A-Za-z]{0,3}-?\d{1,3}\b'
+        descriptive_pattern = r'\b(?:application form|prescribed form|requisite form|relevant form)\b'
+        
+        for chunk in chunks:
+            form_matches = re.findall(coded_pattern, chunk.text, re.IGNORECASE)
+            descriptive_matches = re.findall(descriptive_pattern, chunk.text, re.IGNORECASE)
+            all_forms = form_matches + descriptive_matches
+            
+            if all_forms:
+                chunk.metadata["has_forms"] = True
+                chunk.metadata["form_"]
     
     # ========== FORM CHUNKING ==========
     
@@ -359,6 +432,10 @@ class DocumentChunker:
         """
         Chunk form documents - each form as one chunk.
         Max 1000 tokens, no overlap.
+        
+        NOTE: This path is currently unused as no standalone form documents
+        are being ingested. Form references are detected in procedure documents
+        via has_forms metadata tagging.
         """
         # Forms are typically small, treat as single chunk
         chunks = []
@@ -366,7 +443,7 @@ class DocumentChunker:
         # Split by form boundaries if multiple forms
         form_sections = re.split(r'\n(?=Form Name:|FORM\s+\w+)', text)
         
-        for section in form_sections:
+        for i, section in enumerate(form_sections):
             section = section.strip()
             if not section:
                 continue
@@ -383,6 +460,8 @@ class DocumentChunker:
                 "document_name": filepath.name,
                 "form_name": form_name,
                 "topic_tags": ["form", "application"],
+                "has_forms": True,
+                "form_references": [form_name] if form_name else [],
                 **doc_metadata
             }
             
@@ -390,7 +469,9 @@ class DocumentChunker:
                 text=section,
                 metadata=metadata,
                 char_count=len(section),
-                token_count=token_count
+                token_count=token_count,
+                chunk_level="atomic",
+                chunk_id=self._generate_chunk_id(filepath, i)
             ))
         
         return chunks
@@ -469,7 +550,8 @@ class DocumentChunker:
                     text=section_text,
                     metadata=metadata,
                     char_count=len(section_text),
-                    token_count=token_count
+                    token_count=token_count,
+                    chunk_id=self._generate_chunk_id(filepath, i)
                 ))
             else:
                 # Section too large, split further
@@ -497,7 +579,8 @@ class DocumentChunker:
                         text=sub_text,
                         metadata=metadata,
                         char_count=len(sub_text),
-                        token_count=self._count_tokens(sub_text)
+                        token_count=self._count_tokens(sub_text),
+                        chunk_id=self._generate_chunk_id(filepath, i, j)
                     ))
         
         return chunks
@@ -506,12 +589,14 @@ class DocumentChunker:
         """Split text by section headers."""
         sections = []
         
-        # Header patterns (in priority order)
+        # Header patterns (in priority order) - expanded for institutional documents
         header_patterns = [
             r'\n([A-Z][A-Z\s]{5,}):?\n',  # ALL CAPS headers
             r'\n((?:Section|Chapter|Article)\s+\d+[:\.]?\s*.+?)\n',  # Section/Chapter/Article
+            r'\n(\d+\.\d+\s+[A-Z].+?)\n',  # Numbered headers "1.2 Title"
             r'\n(\d+\.\s+[A-Z].+?)\n',  # Numbered headers "1. Title"
-            r'\n([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*):?\n',  # Title Case headers
+            r'\n([A-Z][A-Za-z\s\d\-]{5,}):?\n',  # Relaxed title case with numbers/hyphens
+            r'\n([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*):?\n',  # Strict Title Case headers
         ]
         
         # Find all headers
@@ -551,8 +636,36 @@ class DocumentChunker:
         max_tokens: int,
         overlap_tokens: int
     ) -> List[str]:
-        """Split text by size with overlap."""
+        """
+        Split text by size with overlap, respecting semantic boundaries.
+        
+        Rules:
+        - Never split mid-sentence (walk back to `. ` + capital)
+        - Never split inside numbered lists
+        - Keep lists whole even if oversized
+        """
         chunks = []
+        
+        # Detect if text contains numbered list
+        has_numbered_list = bool(re.search(r'\n\s*\d+\.\s+', text))
+        
+        if has_numbered_list:
+            # Check if entire text with list fits in limit
+            text_tokens = self._count_tokens(text)
+            if text_tokens <= max_tokens * 1.5:  # Allow 50% overflow for lists
+                return [text]
+            
+            # Split before/after list, not inside
+            list_start = re.search(r'\n\s*\d+\.\s+', text)
+            if list_start:
+                before_list = text[:list_start.start()].strip()
+                list_and_after = text[list_start.start():].strip()
+                
+                # Try to keep list together
+                if before_list and self._count_tokens(before_list) <= max_tokens:
+                    chunks.append(before_list)
+                    chunks.append(list_and_after)
+                    return chunks
         
         # Split by paragraphs first
         paragraphs = text.split('\n\n')
@@ -567,25 +680,73 @@ class DocumentChunker:
                 current_chunk += para + "\n\n"
                 current_tokens += para_tokens
             else:
-                # Save current chunk
+                # Save current chunk if it has content
                 if current_chunk:
                     chunks.append(current_chunk.strip())
                 
-                # Start new chunk with overlap
-                if chunks and overlap_tokens > 0:
-                    # Add last part of previous chunk as overlap
-                    overlap_text = self._get_last_n_tokens(chunks[-1], overlap_tokens)
-                    current_chunk = overlap_text + "\n\n" + para + "\n\n"
-                    current_tokens = self._count_tokens(current_chunk)
+                # Check if single paragraph exceeds limit
+                if para_tokens > max_tokens:
+                    # Split at sentence boundaries
+                    para_chunks = self._split_at_sentence_boundary(para, max_tokens)
+                    chunks.extend(para_chunks[:-1])  # Add all but last
+                    current_chunk = para_chunks[-1] + "\n\n"  # Last becomes start of next
+                    current_tokens = self._count_tokens(para_chunks[-1])
                 else:
-                    current_chunk = para + "\n\n"
-                    current_tokens = para_tokens
+                    # Start new chunk with overlap
+                    if chunks and overlap_tokens > 0:
+                        overlap_text = self._get_last_n_tokens(chunks[-1], overlap_tokens)
+                        current_chunk = overlap_text + "\n\n" + para + "\n\n"
+                        current_tokens = self._count_tokens(current_chunk)
+                    else:
+                        current_chunk = para + "\n\n"
+                        current_tokens = para_tokens
         
         # Add final chunk
         if current_chunk:
             chunks.append(current_chunk.strip())
         
         return chunks
+    
+    def _split_at_sentence_boundary(self, text: str, max_tokens: int) -> List[str]:
+        """
+        Split text at sentence boundaries (. followed by capital letter).
+        
+        Never splits mid-sentence.
+        """
+        chunks = []
+        
+        # Split on sentence boundaries: `. ` followed by capital letter
+        sentences = re.split(r'(\.\s+(?=[A-Z]))', text)
+        
+        # Rejoin sentences with their periods
+        full_sentences = []
+        for i in range(0, len(sentences) - 1, 2):
+            if i + 1 < len(sentences):
+                full_sentences.append(sentences[i] + sentences[i + 1])
+            else:
+                full_sentences.append(sentences[i])
+        if len(sentences) % 2 == 1:
+            full_sentences.append(sentences[-1])
+        
+        current_chunk = ""
+        current_tokens = 0
+        
+        for sentence in full_sentences:
+            sentence_tokens = self._count_tokens(sentence)
+            
+            if current_tokens + sentence_tokens <= max_tokens:
+                current_chunk += sentence
+                current_tokens += sentence_tokens
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence
+                current_tokens = sentence_tokens
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks if chunks else [text]
     
     def _get_last_n_tokens(self, text: str, n_tokens: int) -> str:
         """Get approximately last n tokens from text."""
@@ -645,8 +806,71 @@ class DocumentChunker:
         return ' '.join(name_lower.split()).strip()
     
     def _count_tokens(self, text: str) -> int:
-        """Approximate token count (4 chars per token)."""
-        return len(text) // 4
+        """
+        Estimate token count more accurately than char/4.
+        
+        Uses word count * 1.3 to account for subword tokenization.
+        This is more accurate for Indian names, form codes, and institutional terminology.
+        """
+        if not text:
+            return 0
+        
+        # Word-based estimation with subword inflation factor
+        word_count = len(text.split())
+        return int(word_count * 1.3)
+    
+    def _assign_chunk_levels(self, chunks: List[Chunk], full_text: str) -> List[Chunk]:
+        """
+        Assign chunk levels (overview/section/atomic) after type-specific chunking.
+        
+        Rules:
+        - First chunk if it's short and contains document title/intro: overview
+        - Chunks with definitions, single facts, deadlines: atomic
+        - Everything else: section
+        
+        Args:
+            chunks: List of chunks from type-specific chunker
+            full_text: Original document text
+        
+        Returns:
+            Chunks with chunk_level assigned
+        """
+        if not chunks:
+            return chunks
+        
+        for i, chunk in enumerate(chunks):
+            # Default to section
+            level = "section"
+            
+            # First chunk: check if it's an overview
+            if i == 0 and chunk.token_count < 400:
+                # Check for overview indicators
+                text_lower = chunk.text.lower()
+                if any(indicator in text_lower for indicator in [
+                    "document:", "applies to:", "overview", "summary", 
+                    "introduction", "about this", "purpose"
+                ]):
+                    level = "overview"
+            
+            # Atomic chunks: short, single-purpose content
+            if chunk.token_count < 200:
+                text_lower = chunk.text.lower()
+                # Check for atomic indicators
+                if any(pattern in text_lower for pattern in [
+                    "is defined as", "means", "refers to",  # Definitions
+                    "deadline", "due date", "before", "within",  # Deadlines
+                    "if", "when", "must", "shall", "required",  # Rules
+                    "form name:", "form number:", "application"  # Forms
+                ]):
+                    level = "atomic"
+            
+            # Faculty profiles: always section (complete profiles)
+            if chunk.metadata.get("source_type") == "faculty_profile":
+                level = "section"
+            
+            chunk.chunk_level = level
+        
+        return chunks
     
     def should_skip_chunk(self, chunk: Chunk) -> Tuple[bool, Optional[str]]:
         """
@@ -655,7 +879,7 @@ class DocumentChunker:
         Returns: (should_skip, reason)
         """
         # Too short
-        if chunk.token_count < 50:
+        if chunk.token_count < 20:
             return True, "too_short"
         
         # No alphabetic content

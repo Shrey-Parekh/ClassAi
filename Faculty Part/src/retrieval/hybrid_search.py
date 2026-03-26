@@ -8,6 +8,7 @@ import logging
 from rank_bm25 import BM25Okapi
 
 from ..utils.sparse_encoder import SparseEncoder
+from ..utils.bm25_persistence import BM25PersistenceManager
 
 
 @dataclass
@@ -61,6 +62,9 @@ class HybridSearchEngine:
         self.bm25_index = None
         self.bm25_corpus = []
         self.bm25_ids = []
+        
+        # BM25 persistence manager
+        self.bm25_persistence = BM25PersistenceManager()
         
         # Initialize sparse encoder (fallback)
         try:
@@ -176,14 +180,22 @@ class HybridSearchEngine:
             self.logger.error(f"Dense search failed: {e}")
             return []
     
-    def build_bm25_index(self):
+    def build_bm25_index(self, force_rebuild: bool = False):
         """
-        Build BM25 index from all documents in collection.
+        Build BM25 index from all documents in collection with persistence.
         
-        This should be called after ingestion or on startup.
+        Args:
+            force_rebuild: Force rebuild even if cached index exists
         """
         try:
-            self.logger.info("Building BM25 index...")
+            # Try loading from disk first
+            if not force_rebuild:
+                loaded = self.bm25_persistence.load()
+                if loaded:
+                    self.bm25_index, self.bm25_corpus, self.bm25_ids = loaded
+                    return
+            
+            self.logger.info("Building BM25 index from scratch...")
             
             # Scroll through all documents in collection
             all_points = []
@@ -219,6 +231,9 @@ class HybridSearchEngine:
             if self.bm25_corpus:
                 self.bm25_index = BM25Okapi(self.bm25_corpus)
                 self.logger.info(f"✓ BM25 index built with {len(self.bm25_corpus)} documents")
+                
+                # Save to disk for next startup
+                self.bm25_persistence.save(self.bm25_index, self.bm25_corpus, self.bm25_ids)
             else:
                 self.logger.warning("No documents found for BM25 index")
                 

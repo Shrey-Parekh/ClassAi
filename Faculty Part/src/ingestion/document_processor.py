@@ -173,7 +173,7 @@ class DocumentProcessor:
         doc_metadata: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
-        Process JSON file (JSONL format for faculty profiles).
+        Process JSON file (supports both JSON array and JSONL formats).
         
         Creates multiple focused chunks per faculty member, each < 490 tokens.
         Each chunk includes faculty name for searchability.
@@ -182,31 +182,76 @@ class DocumentProcessor:
         
         content_parts = []
         
-        with open(file_path, 'r', encoding='utf-8') as f:
-            # Parse JSONL (one JSON object per line)
-            for line_num, line in enumerate(f, 1):
-                line = line.strip()
-                if not line:
-                    continue
+        with open(file_path, 'r', encoding='utf-8-sig') as f:  # utf-8-sig handles BOM
+            content = f.read().strip()
+            
+            # Try parsing as JSON array first
+            try:
+                data = json.loads(content)
                 
-                try:
-                    obj = json.loads(line)
+                # If it's a list, process each item
+                if isinstance(data, list):
+                    for i, obj in enumerate(data, 1):
+                        if not isinstance(obj, dict):
+                            continue
+                        
+                        # Extract text and metadata
+                        text = obj.get('text', '')
+                        name = obj.get('name', f'Entry {i}')
+                        profile_url = obj.get('profile_url', '')
+                        
+                        # If no 'text' field, build from other fields
+                        if not text:
+                            text = self._build_faculty_text_from_dict(obj)
+                        
+                        # Split faculty profile into focused chunks
+                        faculty_chunks = self._split_faculty_profile(
+                            name, profile_url, text
+                        )
+                        content_parts.extend(faculty_chunks)
+                
+                # If it's a single dict, process it
+                elif isinstance(data, dict):
+                    text = data.get('text', '')
+                    name = data.get('name', 'Entry 1')
+                    profile_url = data.get('profile_url', '')
                     
-                    # Extract text and metadata
-                    text = obj.get('text', '')
-                    obj_metadata = obj.get('metadata', {})
-                    name = obj_metadata.get('name', f'Entry {line_num}')
-                    profile_url = obj_metadata.get('profile_url', '')
+                    if not text:
+                        text = self._build_faculty_text_from_dict(data)
                     
-                    # Split faculty profile into focused chunks
                     faculty_chunks = self._split_faculty_profile(
                         name, profile_url, text
                     )
                     content_parts.extend(faculty_chunks)
                     
-                except json.JSONDecodeError as e:
-                    print(f"  ⚠ Skipping invalid JSON on line {line_num}: {e}")
-                    continue
+            except json.JSONDecodeError:
+                # Fall back to JSONL format (one JSON per line)
+                f.seek(0)
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    try:
+                        obj = json.loads(line)
+                        
+                        # Extract text and metadata
+                        text = obj.get('text', '')
+                        name = obj.get('name', f'Entry {line_num}')
+                        profile_url = obj.get('profile_url', '')
+                        
+                        if not text:
+                            text = self._build_faculty_text_from_dict(obj)
+                        
+                        # Split faculty profile into focused chunks
+                        faculty_chunks = self._split_faculty_profile(
+                            name, profile_url, text
+                        )
+                        content_parts.extend(faculty_chunks)
+                        
+                    except json.JSONDecodeError as e:
+                        print(f"  ⚠ Skipping invalid JSON on line {line_num}: {e}")
+                        continue
         
         # Check if any entries were parsed
         if not content_parts:
@@ -221,9 +266,49 @@ class DocumentProcessor:
             "metadata": {
                 **doc_metadata,
                 "entry_count": len(content_parts),
-                "format": "jsonl"
+                "format": "json"
             }
         }
+    
+    def _build_faculty_text_from_dict(self, obj: Dict[str, Any]) -> str:
+        """
+        Build faculty text from dictionary fields.
+        
+        Handles cases where 'text' field doesn't exist.
+        """
+        parts = []
+        
+        # Name
+        if 'name' in obj:
+            parts.append(f"Name: {obj['name']}")
+        
+        # Qualification
+        if 'qualification' in obj:
+            parts.append(f"Qualification: {obj['qualification']}")
+        
+        # Experience
+        if 'experience' in obj:
+            parts.append(f"Experience: {obj['experience']}")
+        
+        # Research Interests
+        if 'research_interests' in obj:
+            parts.append(f"Research Interests: {obj['research_interests']}")
+        
+        # Publications
+        if 'publications' in obj:
+            parts.append(f"Publications: {obj['publications']}")
+        
+        # Awards
+        if 'awards' in obj:
+            parts.append(f"Awards: {obj['awards']}")
+        
+        # Any other fields
+        for key, value in obj.items():
+            if key not in ['name', 'qualification', 'experience', 'research_interests', 
+                          'publications', 'awards', 'profile_url', 'text', 'metadata']:
+                parts.append(f"{key.replace('_', ' ').title()}: {value}")
+        
+        return " ".join(parts)
     
     def _split_faculty_profile(
         self,

@@ -302,7 +302,7 @@ class NewIngestionPipeline:
         
         # Prepare payload
         payload = {
-            "text": text,
+            "content": text,  # Use "content" to match BM25 index expectations
             "char_count": len(text),
             "token_count": len(text) // 4,  # Approximate
             **metadata

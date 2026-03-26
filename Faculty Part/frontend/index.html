@@ -3,126 +3,130 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Faculty Assistant · ClassAI</title>
+    <title>ClassAI · NMIMS Knowledge Assistant</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <!-- Warm humanist body font, close in feel to Söhne -->
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
-    <script src="/static/renderer.js"></script>
 </head>
 <body>
-    <div class="app-root">
-        <!-- Left rail: conversations -->
-        <aside class="sidebar">
-            <div class="sidebar-inner">
-                <div class="sidebar-header">
-                    <div class="product-mark">
-                        <div class="product-initial">F</div>
-                        <div class="product-labels">
-                            <span class="product-name">College Assistant</span>
-                            <span class="product-meta">ClassAI</span>
-                        </div>
-                    </div>
-                </div>
+    <div class="landing-root">
 
-                <div class="sidebar-section sidebar-section--top">
-                    <button class="sidebar-new" onclick="startNewChat()">
-                        <span class="sidebar-new-icon">+</span>
-                        <span>New conversation</span>
-                    </button>
+        <!-- Navbar -->
+        <nav class="nav-bar">
+            <div class="nav-inner">
+                <div class="nav-brand">
+                    <div class="brand-mark">F</div>
+                    <span class="brand-name">ClassAI</span>
                 </div>
-
-                <div class="sidebar-section sidebar-section--history">
-                    <div class="sidebar-section-label">Recent</div>
-                    <div id="recentChats" class="sidebar-history-list">
-                        <div class="sidebar-history-empty">
-                            No saved conversations yet.
-                        </div>
-                    </div>
+                <div class="nav-actions">
+                    <a href="/chat" class="nav-cta">Open Assistant</a>
+                    <a href="/signin" class="nav-cta-ghost">Sign In</a>
                 </div>
             </div>
-        </aside>
+        </nav>
 
-        <div class="main-shell">
-            <header class="main-header">
-                <div class="model-id">
-                    <span class="model-name">Faculty RAG · Gemini</span>
-                </div>
-                <div class="connection">
-                    <span class="connection-dot" id="statusIndicator">
-                        <span class="connection-dot-inner"></span>
-                    </span>
-                    <span class="connection-label" id="statusText">Connecting…</span>
-                </div>
-            </header>
+        <main class="landing-main">
 
-            <main class="main-pane">
-                <div class="main-pane-inner">
-                    <div class="thinking-indicator" id="thinkingIndicator" aria-live="polite"></div>
-                    <section class="messages-frame" id="messagesContainer">
-                        <div class="conversation-column">
-                            <!-- Initial guidance surface -->
-                            <section class="welcome" id="welcomeScreen">
-                                <div class="welcome-heading">
-                                    <p class="welcome-eyebrow">Faculty knowledge, grounded in documents</p>
-                                    <p class="welcome-title">Ask clear, work-like questions.</p>
-                                    <p class="welcome-copy">
-                                        This workspace searches approved faculty policies, records and datasets.
-                                        Answers are constrained to what the system can cite.
-                                    </p>
-                                </div>
-
-                                <div class="welcome-grid">
-                                    <div class="welcome-group">
-                                        <div class="welcome-label">Forms & Applications</div>
-                                        <button class="prompt-card" type="button" onclick="sendSuggestion('What are the important forms and their names I must be aware of?')">
-                                            What are the important forms and their names I must be aware of?
-                                        </button>
-                                        <button class="prompt-card" type="button" onclick="sendSuggestion('Walk me through the seed grant application process including required documents.')">
-                                            Walk me through the seed grant application process including required documents.
-                                        </button>
-                                    </div>
-                                    <div class="welcome-group">
-                                        <div class="welcome-label">Policies & Guidelines</div>
-                                        <button class="prompt-card" type="button" onclick="sendSuggestion('Summarise what the NMIMS academic guidelines state.')">
-                                            Summarise what the NMIMS academic guidelines state.
-                                        </button>
-                                        <button class="prompt-card" type="button" onclick="sendSuggestion('What is the leave policy for faculty members?')">
-                                            What is the leave policy for faculty members?
-                                        </button>
-                                    </div>
-                                </div>
-                            </section>
-
-                            <!-- Streaming conversation -->
-                            <section class="messages-thread" aria-label="Conversation">
-                                <div id="messages"></div>
-                            </section>
+            <!-- Hero -->
+            <section class="hero-section">
+                <div class="hero-inner">
+                    <div class="hero-text">
+                        <h1 class="hero-title">Every answer.<br>One place.</h1>
+                        <p class="hero-subtitle">
+                            ClassAI connects you to NMIMS policies, documents, and institutional knowledge — instantly, with source citations.
+                        </p>
+                        <div class="hero-actions">
+                            <a href="/chat" class="btn-primary">Open Assistant</a>
+                            <a href="#how-it-works" class="btn-ghost">See how it works</a>
                         </div>
-                    </section>
+                    </div>
+                    <div class="hero-card" aria-label="Sample conversation">
+                        <div class="hero-card-label">ClassAI</div>
+                        <div class="hero-card-body">
+                            <div class="mock-turn mock-user">
+                                <span class="mock-role">You</span>
+                                <p>What documents do I need for a grade appeal?</p>
+                            </div>
+                            <div class="mock-turn mock-assistant">
+                                <span class="mock-role">ClassAI</span>
+                                <p>You will need Form R-14, your attendance record, and a written statement. All forms are available in the Academic Compendium.</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </main>
+            </section>
 
-            <footer class="composer-shell">
-                <div class="composer">
-                    <textarea
-                        id="userInput"
-                        class="composer-input"
-                        rows="1"
-                        placeholder="Ask about a faculty policy, eligibility rule, or person—without including any personal identifiers."
-                    ></textarea>
-                    <button id="sendBtn" class="composer-send" type="button" aria-label="Send message">
-                        <span class="composer-send-icon">↩</span>
-                    </button>
+            <!-- Role strip -->
+            <div class="role-strip">
+                <div class="role-strip-col">
+                    <span class="role-strip-title">Students</span>
+                    <span class="role-strip-desc">Syllabi · Question papers · Course resources</span>
                 </div>
-                <div class="composer-meta">
-                    <span>Enter to send · Shift + Enter for new line</span>
+                <div class="role-strip-divider"></div>
+                <div class="role-strip-col">
+                    <span class="role-strip-title">Faculty</span>
+                    <span class="role-strip-desc">Forms · HR policies · Eligibility rules</span>
                 </div>
-            </footer>
-        </div>
+                <div class="role-strip-divider"></div>
+                <div class="role-strip-col">
+                    <span class="role-strip-title">Everyone</span>
+                    <span class="role-strip-desc">Campus navigation · Document search</span>
+                </div>
+            </div>
+
+            <!-- Feature block -->
+            <section class="feature-block" id="how-it-works">
+                <div class="feature-inner">
+                    <div class="feature-list">
+                        <div class="feature-item">
+                            <h3 class="feature-title">Policy lookup</h3>
+                            <p class="feature-desc">Find leave rules, exam guidelines, and institutional procedures.</p>
+                        </div>
+                        <div class="feature-item">
+                            <h3 class="feature-title">Document access</h3>
+                            <p class="feature-desc">Locate forms, agreements, and official compendium entries.</p>
+                        </div>
+                        <div class="feature-item">
+                            <h3 class="feature-title">Quick answers</h3>
+                            <p class="feature-desc">Ask in plain language. Get answers with document references.</p>
+                        </div>
+                    </div>
+                    <div class="access-list">
+                        <div class="access-item">
+                            <span class="access-label">Syllabus lookup</span>
+                            <span class="access-desc">Find the course structure and reading list for any subject.</span>
+                        </div>
+                        <div class="access-item">
+                            <span class="access-label">Form guidance</span>
+                            <span class="access-desc">Understand which forms to fill, how to fill them, and where to submit.</span>
+                        </div>
+                        <div class="access-item">
+                            <span class="access-label">Policy search</span>
+                            <span class="access-desc">Query leave rules, exam policies, and institutional procedures.</span>
+                        </div>
+                        <div class="access-item">
+                            <span class="access-label">Classroom directions</span>
+                            <span class="access-desc">Get step-by-step navigation to any room from your current location.</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="landing-footer">
+            <div class="footer-inner">
+                <span class="footer-left">ClassAI — NMIMS Internal Tool</span>
+                <span class="footer-right" id="footerYear"></span>
+            </div>
+        </footer>
+
     </div>
 
-    <script src="/static/script.js"></script>
+    <script>
+        document.getElementById('footerYear').textContent = new Date().getFullYear();
+    </script>
 </body>
 </html>

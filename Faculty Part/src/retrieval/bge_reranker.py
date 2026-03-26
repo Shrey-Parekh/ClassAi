@@ -41,18 +41,20 @@ class BGEReranker:
         self,
         query: str,
         results: List[Any],
-        top_k: int = 15
+        top_k: int = 15,
+        max_per_doc: int = 3
     ) -> List[Any]:
         """
-        Rerank search results using cross-encoder.
+        Rerank search results using cross-encoder with diversity cap.
         
         Args:
             query: Original query text
             results: List of SearchResult objects from hybrid search
             top_k: Number of top results to return
+            max_per_doc: Maximum chunks from any single document (default: 3)
         
         Returns:
-            Reranked list of SearchResult objects
+            Reranked list of SearchResult objects with diversity applied
         """
         if not results:
             return []
@@ -73,12 +75,54 @@ class BGEReranker:
                 result.score = float(score)
                 result.source = "reranked"
             
-            # Sort by reranker score and return top-k
+            # Sort by reranker score
             reranked = sorted(results, key=lambda x: x.score, reverse=True)
             
-            return reranked[:top_k]
+            # Apply diversity cap: max N chunks per doc_id
+            diverse_results = self._apply_diversity_cap(reranked, max_per_doc, top_k)
+            
+            return diverse_results
             
         except Exception as e:
             self.logger.error(f"Reranking failed: {e}")
             # Fallback: return original results
             return results[:top_k]
+    
+    def _apply_diversity_cap(
+        self,
+        results: List[Any],
+        max_per_doc: int,
+        top_k: int
+    ) -> List[Any]:
+        """
+        Apply source diversity cap to prevent document monopolization.
+        
+        Args:
+            results: Sorted results by score
+            max_per_doc: Maximum chunks from any single doc_id
+            top_k: Target number of results
+        
+        Returns:
+            Diverse results list
+        """
+        doc_counts = {}
+        diverse_results = []
+        
+        for result in results:
+            # Get doc_id from metadata
+            doc_id = result.metadata.get("doc_id", result.metadata.get("parent_doc_id", "unknown"))
+            
+            # Check if we've hit the cap for this document
+            current_count = doc_counts.get(doc_id, 0)
+            
+            if current_count < max_per_doc:
+                diverse_results.append(result)
+                doc_counts[doc_id] = current_count + 1
+                
+                # Stop when we have enough results
+                if len(diverse_results) >= top_k:
+                    break
+        
+        self.logger.info(f"Diversity cap applied: {len(diverse_results)} results from {len(doc_counts)} documents")
+        
+        return diverse_results

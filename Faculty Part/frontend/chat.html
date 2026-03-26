@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat · ClassAI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/chat.css">
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+    <script>
+        (function() {
+            if (!sessionStorage.getItem('classai_token')) {
+                window.location.replace('/signin');
+            }
+        })();
+    </script>
+
+    <div class="chat-root">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-inner">
+                <!-- Product mark -->
+                <div class="product-mark">
+                    <div class="product-initial">F</div>
+                    <div class="product-labels">
+                        <span class="product-name">ClassAI</span>
+                        <span class="product-role" id="roleLabel"></span>
+                    </div>
+                </div>
+
+                <!-- New conversation -->
+                <button class="sidebar-new" onclick="startNewChat()">
+                    <i data-lucide="plus"></i>
+                    <span>New conversation</span>
+                </button>
+
+                <!-- History -->
+                <div class="sidebar-history">
+                    <div class="sidebar-history-label">Recent</div>
+                    <div class="sidebar-history-list" id="historyList">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Footer nav -->
+                <div class="sidebar-footer">
+                    <a href="/" class="sidebar-nav-btn sidebar-nav-btn--active">
+                        <i data-lucide="home"></i>
+                        <span>Home</span>
+                    </a>
+                    <button class="sidebar-nav-btn">
+                        <i data-lucide="user-circle"></i>
+                        <span>Account</span>
+                    </button>
+                    <button class="sidebar-nav-btn" onclick="signOut()">
+                        <i data-lucide="log-out"></i>
+                        <span>Sign out</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main panel -->
+        <main class="main-panel">
+            <!-- Header -->
+            <header class="main-header">
+                <div class="model-id">ClassAI · Gemini</div>
+            </header>
+
+            <!-- Messages -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="messages-inner">
+                    <!-- Welcome screen -->
+                    <section class="welcome" id="welcomeScreen">
+                        <div class="welcome-eyebrow">NMIMS Knowledge Base</div>
+                        <h1 class="welcome-title">Ask anything.</h1>
+                        <p class="welcome-description">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
+                        <div class="welcome-prompts">
+                            <button class="prompt-chip" onclick="usePrompt(this)">What are the leave rules for teaching staff?</button>
+                            <button class="prompt-chip" onclick="usePrompt(this)">How do I apply for a grade appeal?</button>
+                            <button class="prompt-chip" onclick="usePrompt(this)">What is the PhD coursework requirement?</button>
+                            <button class="prompt-chip" onclick="usePrompt(this)">Where can I find the Academic Calendar 2024-25?</button>
+                        </div>
+                    </section>
+
+                    <!-- Messages thread -->
+                    <div class="messages-thread" id="messages"></div>
+                </div>
+            </div>
+
+            <!-- Composer -->
+            <footer class="composer-shell">
+                <div class="composer-inner">
+                    <div class="composer-wrap">
+                        <textarea 
+                            id="userInput" 
+                            class="composer-input" 
+                            placeholder="Ask a question about NMIMS policies, documents, or guidelines…"
+                            rows="1"
+                        ></textarea>
+                        <button id="sendBtn" class="composer-send" disabled>
+                            <i data-lucide="arrow-up"></i>
+                        </button>
+                    </div>
+                    <div class="composer-hint">Enter to send · Shift + Enter for new line</div>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <script src="/static/chat.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
