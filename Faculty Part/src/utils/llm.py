@@ -47,16 +47,18 @@ class LLMClient:
         prompt: str,
         max_tokens: int = 4096,
         temperature: float = None,
-        format: str = None
+        format: str = None,
+        max_retries: int = 2
     ) -> str:
         """
-        Generate text from prompt using Ollama.
+        Generate text from prompt using Ollama with retry logic.
         
         Args:
             prompt: Input prompt
             max_tokens: Maximum tokens to generate (default: 4096, increased for detailed responses)
             temperature: Sampling temperature (overrides default, recommended: 0.2 for factual responses)
             format: Output format constraint ("json" forces valid JSON output)
+            max_retries: Number of retries on failure or empty response
         
         Returns:
             Generated text
@@ -84,10 +86,40 @@ class LLMClient:
         if format:
             payload["format"] = format
         
-        try:
-            response = requests.post(url, json=payload, timeout=120)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("response", "")
-        except requests.exceptions.RequestException as e:
-            raise RuntimeError(f"Ollama generation failed: {e}")
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(url, json=payload, timeout=120)
+                response.raise_for_status()
+                result = response.json()
+                generated = result.get("response", "").strip()
+                
+                # Check for empty or invalid response
+                if not generated or generated == "{}":
+                    if attempt < max_retries:
+                        print(f"[LLM] Empty response on attempt {attempt + 1}/{max_retries + 1}, retrying...")
+                        import time
+                        time.sleep(2)
+                        continue
+                    else:
+                        print(f"[LLM] All retries exhausted, returning empty response")
+                        return "{}"
+                
+                return generated
+                
+            except requests.exceptions.Timeout as e:
+                if attempt < max_retries:
+                    print(f"[LLM] Timeout on attempt {attempt + 1}/{max_retries + 1}, retrying...")
+                    import time
+                    time.sleep(2)
+                else:
+                    raise RuntimeError(f"Ollama generation timed out after {max_retries + 1} attempts")
+                    
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries:
+                    print(f"[LLM] Request error on attempt {attempt + 1}/{max_retries + 1}: {e}, retrying...")
+                    import time
+                    time.sleep(2)
+                else:
+                    raise RuntimeError(f"Ollama generation failed: {e}")
+        
+        return "{}"

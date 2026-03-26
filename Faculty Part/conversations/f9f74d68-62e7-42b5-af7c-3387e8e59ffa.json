@@ -1,0 +1,35 @@
+{
+  "session_id": "f9f74d68-62e7-42b5-af7c-3387e8e59ffa",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the types of leaves available?",
+      "timestamp": "2026-03-26T19:10:20.021619",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"leave_types\", \"title\": \"Types of Leaves Available at NMIMS\", \"subtitle\": null, \"sections\": [{\"heading\": \"Leave Types\", \"type\": \"bullets\", \"items\": [\"Annual Leave [1]\", \"Academic Leave (Conference/FDP) [1]\", \"Sabbatical Leave (6-12 months, after 7 years) [1, 4]\", \"Leave Without Pay (LWP) [1, 3]\", \"Special Leave (Marriage/Bereavement) [1, 2]\", \"Election Duty Leave [2]\", \"Court Summons Leave [2]\", \"Blood Donation Leave [2]\", \"Medical Leave [3]\"]}, {\"heading\": \"Specific Details\", \"type\": \"bullets\", \"items\": [\"Marriage Leave: 3 days paid leave (once in service, requires marriage invitation) [2]\", \"Bereavement Leave: 5 days paid leave for immediate family member (requires death certificate) [2]\", \"LWP: Granted only in exceptional circumstances and impacts gratuity/provident fund [3]\", \"Study Leave (Long-term): Up to 2 years for Ph.D., without pay initially, bond required post-return [4]\"]}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-26T19:10:20.022687",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T19:10:20.021619",
+  "updated_at": "2026-03-26T19:10:20.022687"
+}

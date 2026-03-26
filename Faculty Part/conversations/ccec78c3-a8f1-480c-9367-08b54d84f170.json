@@ -1,0 +1,35 @@
+{
+  "session_id": "ccec78c3-a8f1-480c-9367-08b54d84f170",
+  "messages": [
+    {
+      "role": "user",
+      "content": "what are the important guidlines mentioned for the facultty",
+      "timestamp": "2026-03-26T19:23:16.177556",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"guidelines_summary\", \"title\": \"Important Guidelines for NMIMS Faculty\", \"subtitle\": null, \"sections\": [{\"heading\": \"General Applicability\", \"type\": \"bullets\", \"items\": [\"These guidelines apply to all full-time regular faculty, contractual faculty, visiting and adjunct faculty, and Professors of Practice [3].\"]}, {\"heading\": \"Academic Conduct & Attendance\", \"type\": \"bullets\", \"items\": [\"Faculty are responsible for recording attendance through the NMIMS Attendance Management System (AMS) within 30 minutes of class end [2].\", \"At the end of the semester, faculty must certify final attendance records and identify students below the 75% attendance threshold for debarment from examinations [2].\", \"Any deviation in syllabus coverage must be reported to the Programme Director [4].\"]}, {\"heading\": \"Professional & Ethical Standards\", \"type\": \"bullets\", \"items\": [\"Classes must not be cancelled without prior written approval from the Department Head. A makeup class must be arranged within the same week if cancellation is unavoidable [4].\"]}, {\"heading\": \"Outside Employment & Consultancy\", \"type\": \"bullets\", \"items\": [\"Full-time regular faculty require prior written approval from the Vice Chancellor for outside employment [5].\", \"Consultancy work is permitted up to 52 days per year (non-teaching days only) with no conflict of interest, and revenue sharing follows institutional policy [5].\"]}, {\"heading\": \"Resource Availability\", \"type\": \"bullets\", \"items\": [\"The Employee Resource Book is available to answer questions and provide information on policies, procedures, entitlements, and values [6].\"]}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-26T19:23:16.178564",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T19:23:16.177556",
+  "updated_at": "2026-03-26T19:23:16.178564"
+}
