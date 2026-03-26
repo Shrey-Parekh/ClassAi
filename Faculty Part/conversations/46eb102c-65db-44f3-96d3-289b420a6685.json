@@ -1,0 +1,75 @@
+{
+  "session_id": "46eb102c-65db-44f3-96d3-289b420a6685",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Leave Application",
+      "timestamp": "2026-03-26T18:51:57.421246",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Policy\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"NMIMS provides a comprehensive leave framework designed to support faculty wellbeing.\"}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-26T18:51:57.422253",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "tell me in detail what are the guidlines provided in the Employee resource book",
+      "timestamp": "2026-03-26T18:53:16.888012",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"guideline_overview\", \"title\": \"NMIMS Employee Resource Book Guidelines Overview\", \"subtitle\": null, \"sections\": [{\"heading\": \"About the Document\", \"type\": \"paragraph\", \"content\": \"This document serves as a comprehensive resource for all employees of NMIMS University [2]. It outlines various policies, procedures, and guidelines to ensure a consistent and supportive work environment.\"}, {\"heading\": \"General Expectations & Agreements\", \"type\": \"paragraph\", \"content\": \"Faculty members are expected to abide by all rules and regulations outlined in this resource book [4]. This includes adherence to university policies and ethical conduct.\"}, {\"heading\": \"Leave Entitlements\", \"type\": \"paragraph\", \"content\": \"The Employee Resource Book details the leave entitlements available to faculty members, including specifics on types of leave and eligibility [6].\"}, {\"heading\": \"Important Portals\", \"type\": \"paragraph\", \"content\": \"The book also lists important portals for employees to access various resources and services [3].\"}], \"footer\": null, \"confidence\": \"high\", \"fallback\": \"This overview provides a general summary. Please refer to the full Employee Resource Book for complete details.\"}",
+      "timestamp": "2026-03-26T18:53:16.889012",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T18:51:57.421246",
+  "updated_at": "2026-03-26T18:53:16.889012"
+}

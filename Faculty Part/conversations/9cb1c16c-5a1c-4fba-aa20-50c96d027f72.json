@@ -1,0 +1,41 @@
+{
+  "session_id": "9cb1c16c-5a1c-4fba-aa20-50c96d027f72",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Where can I find the Academic Calendar 2024-25?",
+      "timestamp": "2026-03-26T17:53:49.337773",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"document_lookup\", \"title\": \"Academic Calendar 2024-25\", \"subtitle\": null, \"sections\": [{\"heading\": \"Location\", \"type\": \"paragraph\", \"content\": \"The Academic Calendar for 2024-25 is typically available on the university's official website and student portal. [1] Please check these resources for the most up-to-date information. [2]\"}, {\"heading\": \"Links\", \"type\": \"bullets\", \"items\": [\"University Website: (Please refer to NMIMS official website - link not provided as it changes frequently) [1]\", \"Student Portal: (Access through your student login credentials \\u2013 link not provided as access is restricted) [2]\"]}], \"footer\": \"Contact the Student Affairs department or your respective program coordinator for further assistance. [3]\", \"confidence\": \"medium\", \"fallback\": \"I am unable to provide a direct link to the Academic Calendar 2024-25. Please refer to the resources mentioned above.\"}",
+      "timestamp": "2026-03-26T17:53:49.338775",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T17:53:49.337773",
+  "updated_at": "2026-03-26T17:53:49.338775"
+}

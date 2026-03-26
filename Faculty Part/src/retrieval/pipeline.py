@@ -208,7 +208,7 @@ class RetrievalPipeline:
         chunks = [
             {
                 "chunk_id": result.chunk_id,
-                "content": result.content,
+                "text": result.content,  # Use "text" key for consistency with answer_generator
                 "score": result.score,
                 "metadata": result.metadata,
             }

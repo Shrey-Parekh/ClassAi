@@ -1,0 +1,75 @@
+{
+  "session_id": "f5c27f87-5bfa-404d-b166-f27813776665",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Where can I find the Academic Calendar 2024-25?",
+      "timestamp": "2026-03-26T18:58:49.829546",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"information_request\", \"title\": \"Academic Calendar 2024-25\", \"subtitle\": null, \"sections\": [{\"heading\": \"Information Availability\", \"type\": \"paragraph\", \"content\": \"Unfortunately, the provided documents do not contain information regarding where to find the Academic Calendar for 2024-25. The documents primarily focus on faculty guidelines, employee resources, and travel application procedures [1, 2, 3, 4, 5, 6].\"}], \"footer\": null, \"confidence\": \"low\", \"fallback\": \"I am unable to locate the Academic Calendar 2024-25 within these documents. Please consult other NMIMS resources or contact the relevant administrative office for this information.\"}",
+      "timestamp": "2026-03-26T18:58:49.830553",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    },
+    {
+      "role": "user",
+      "content": "tell me more about NMIMS",
+      "timestamp": "2026-03-26T18:59:52.699333",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"About NMIMS\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"Narsee Monjee Institute of Management Studies (NMIMS) was founded in 1981 under the aegis of the Vile Parle Kelavani Mandal (VPKM). It has grown into a multi-disciplinary, multi-campus deemed-to-be university with a national and international presence. NMIMS was granted deemed university status by the University Grants Commission (UGC) in 2003. The institution is accredited with the highest grade of A++ by NAAC and holds an NIRF ranking among the top institutions in India.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"NMIMS operates under the governance of the Board of Management, supported by an Academic Council, Finance Committee, and various statutory bodies as mandated by the UGC. The Vice Chancellor is the principal academic and executive officer of the university.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"NMIMS is a premier deemed-to-be university committed to academic excellence, research, and institutional development, duly recognized by the University Grants Commission (UGC), the Association of Indian Universities (AIU), and accredited A++ by the National Assessment and Accreditation Council (NAAC).\"}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-26T18:59:52.700336",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T18:58:49.829546",
+  "updated_at": "2026-03-26T18:59:52.700336"
+}

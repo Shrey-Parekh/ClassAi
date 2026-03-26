@@ -1,0 +1,41 @@
+{
+  "session_id": "e0a8d279-2dac-4759-b4cc-754e24e5c96d",
+  "messages": [
+    {
+      "role": "user",
+      "content": "hey",
+      "timestamp": "2026-03-26T18:26:55.500240",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Information Not Available\", \"subtitle\": null, \"sections\": [], \"footer\": null, \"confidence\": \"none\", \"fallback\": \"I don't have that information in the available documents.\"}",
+      "timestamp": "2026-03-26T18:26:55.501237",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T18:26:55.500240",
+  "updated_at": "2026-03-26T18:26:55.501237"
+}

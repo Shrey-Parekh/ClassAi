@@ -39,5 +39,8 @@ openpyxl==3.1.2
 requests==2.31.0
 numpy==1.26.3
 
+# LLM API
+# google-genai>=1.68.0  # Not needed for Ollama
+
 # Reranking
 FlagEmbedding==1.2.10

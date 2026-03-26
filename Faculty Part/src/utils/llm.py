@@ -91,5 +91,3 @@ class LLMClient:
             return result.get("response", "")
         except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Ollama generation failed: {e}")
-
-

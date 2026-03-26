@@ -419,7 +419,9 @@ class DocumentChunker:
             
             if all_forms:
                 chunk.metadata["has_forms"] = True
-                chunk.metadata["form_"]
+                chunk.metadata["form_references"] = list(set(all_forms))
+        
+        return chunks
     
     # ========== FORM CHUNKING ==========
     
@@ -878,8 +880,23 @@ class DocumentChunker:
         
         Returns: (should_skip, reason)
         """
-        # Too short
-        if chunk.token_count < 20:
+        # Atomic fact exception — short but contains high-value patterns
+        atomic_indicators = [
+            r"deadline", r"due date", r"must be submitted",
+            r"is defined as", r"means ", r"shall not exceed",
+            r"maximum", r"minimum", r"within \d+ days",
+            r"not less than", r"not more than", r"effective from"
+        ]
+        
+        is_atomic = any(
+            re.search(pattern, chunk.text, re.IGNORECASE)
+            for pattern in atomic_indicators
+        )
+        
+        # Allow short chunks only if they contain atomic fact patterns
+        if chunk.token_count < 50:
+            if is_atomic and chunk.token_count >= 25:
+                return False, None  # Keep atomic facts
             return True, "too_short"
         
         # No alphabetic content

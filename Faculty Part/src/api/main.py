@@ -327,12 +327,16 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
             
             return QueryResponse(**cached_result)
         
+        print(f"[PIPELINE] Starting retrieval for: {request.query[:50]}...")
+        
         # Retrieve relevant chunks
         retrieval_result = await asyncio.to_thread(
             retrieval_pipeline.retrieve,
             query=request.query,
             top_k=request.top_k or 15
         )
+        
+        print(f"[PIPELINE] Retrieval complete. Found {len(retrieval_result['chunks'])} chunks")
         
         # Check if any chunks were retrieved
         if not retrieval_result["chunks"]:
@@ -439,8 +443,14 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         raise
     except Exception as e:
         import traceback
-        print(f"Error processing query: {str(e)}")
+        print("=" * 80)
+        print("CRITICAL ERROR IN QUERY ENDPOINT")
+        print("=" * 80)
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("\nFull traceback:")
         print(traceback.format_exc())
+        print("=" * 80)
         
         # Return user-friendly error
         raise HTTPException(

@@ -145,19 +145,48 @@ class AnswerGenerator:
         # Select chunks dynamically based on token budget and relevance
         chunks_to_use = self._select_chunks_by_tokens(retrieved_chunks, intent_type)
         
-        print(f"=== DYNAMIC CHUNK SELECTION ===")
+        print(f"=== CHUNK RETRIEVAL DIAGNOSTIC ===")
         print(f"Intent: {intent_type}")
         print(f"Chunks available: {len(retrieved_chunks)}")
         print(f"Chunks selected: {len(chunks_to_use)}")
         if chunks_to_use:
             print(f"Score range: {chunks_to_use[0].get('score', 0):.3f} - {chunks_to_use[-1].get('score', 0):.3f}")
-        print("=== END SELECTION ===")
+            for i, chunk in enumerate(chunks_to_use[:3], 1):
+                print(f"\nCHUNK {i}:")
+                print(f"  Available keys: {list(chunk.keys())}")
+                print(f"  Score: {chunk.get('score', 'N/A')}")
+                print(f"  Source: {chunk.get('metadata', {}).get('document_name', 'unknown')}")
+                print(f"  Section: {chunk.get('metadata', {}).get('section_title', 'N/A')}")
+                
+                # Try multiple possible content keys
+                content = (
+                    chunk.get("text") or 
+                    chunk.get("content") or 
+                    chunk.get("chunk_text") or
+                    chunk.get("payload", {}).get("text") or
+                    chunk.get("payload", {}).get("content") or
+                    "*** EMPTY - KEY MISMATCH ***"
+                )
+                print(f"  Content preview: {str(content)[:200]}")
+        else:
+            print("WARNING: No chunks selected!")
+        print("=== END CHUNK DIAGNOSTIC ===")
         
         # Build context from selected chunks
         context = self._build_context(chunks_to_use)
         
+        print(f"=== CONTEXT DIAGNOSTIC ===")
+        print(f"Context length: {len(context)} chars")
+        print(f"Context preview (first 500 chars):\n{context[:500]}")
+        print("=== END CONTEXT ===")
+        
         # Get JSON prompt for intent
         prompt = get_prompt(intent_type, context, query)
+        
+        print(f"=== PROMPT DIAGNOSTIC ===")
+        print(f"Prompt length: {len(prompt)} chars")
+        print(f"Prompt preview (first 800 chars):\n{prompt[:800]}")
+        print("=== END PROMPT ===")
         
         # DEBUG: Count tokens being sent to Gemma
         prompt_chars = len(prompt)
@@ -174,18 +203,30 @@ class AnswerGenerator:
         print(f"Gemma3:12b context window: 32768 tokens (32K)")
         print(f"Usage: {(estimated_input_tokens/32768)*100:.1f}% of context window")
         print("=== END TOKEN ESTIMATE ===")
-        
+
         # Generate with very low temperature for JSON consistency
         # Increased max_tokens to 4096 for detailed responses
-        # format="json" forces Ollama to constrain output to valid JSON at token sampling level
-        raw_response = self.llm.generate(prompt, temperature=0.1, max_tokens=4096, format="json")
+        # format="json" forces Ollama to output valid JSON
+        raw_response = self.llm.generate(
+            prompt,
+            temperature=0.2,  # Increased from 0.1 to prevent collapse
+            max_tokens=4096,
+            format="json"
+        )
         
+        # DIAGNOSTIC: Log what Ollama actually returns
+        print(f"=== RAW OLLAMA RESPONSE ===")
+        print(f"Length: {len(raw_response)} chars")
+        print(f"First 500 chars: {raw_response[:500]}")
+        print(f"Last 100 chars: {raw_response[-100:]}")
+        print("=== END RAW RESPONSE ===")
+
         # Parse and validate JSON
         structured = self._parse_json_response(raw_response, intent_type, query)
-        
+
         # Extract sources
         sources = self._extract_sources(chunks_to_use)
-        
+
         # Calculate confidence
         confidence = self._calculate_confidence(chunks_to_use, structured)
         
@@ -337,15 +378,21 @@ class AnswerGenerator:
         context_parts = []
         
         for i, chunk in enumerate(chunks, 1):
-            # Text is stored in metadata.text, not content
-            content = chunk.get("metadata", {}).get("text", "")
-            doc_title = chunk.get("metadata", {}).get("title", "Unknown Document")
+            # Text is at top level, not in metadata
+            content = chunk.get("text", "")
+            doc_name = chunk.get("metadata", {}).get("document_name", "Unknown Document")
+            section = chunk.get("metadata", {}).get("section_title", "")
+            
+            # Build source header
+            source_header = f"Source: {doc_name}"
+            if section:
+                source_header += f" — {section}"
             
             # Number chunk for citation
-            numbered = f"[{i}] {content}"
+            numbered = f"[{i}] {source_header}\n{content}"
             context_parts.append(numbered)
         
-        return "\n\n".join(context_parts)
+        return "\n\n---\n\n".join(context_parts)
     
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """Extract source document information from chunks."""

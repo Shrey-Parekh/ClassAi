@@ -1,0 +1,41 @@
+{
+  "session_id": "8607c456-4b17-430e-9329-fdb308bce418",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the leave rules for teaching staff?",
+      "timestamp": "2026-03-26T18:43:07.562119",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"lookup\", \"title\": \"Response Error\", \"subtitle\": null, \"sections\": [], \"footer\": null, \"confidence\": \"none\", \"fallback\": \"I was unable to format a response properly. Please rephrase your question or contact HR directly.\"}",
+      "timestamp": "2026-03-26T18:43:07.563117",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-26T18:43:07.562119",
+  "updated_at": "2026-03-26T18:43:07.563117"
+}
