@@ -52,11 +52,11 @@ class AnswerGenerator:
     - Dynamic token-based chunk limiting for optimal context usage
     """
     
-    # Context window allocation (16K total)
-    MAX_CONTEXT_TOKENS = 16384
+    # Context window allocation (8K total for faster processing)
+    MAX_CONTEXT_TOKENS = 8192
     SYSTEM_PROMPT_TOKENS = 500  # Prompt template overhead
-    OUTPUT_TOKENS = 2000  # Reserve for LLM response
-    AVAILABLE_FOR_CHUNKS = MAX_CONTEXT_TOKENS - SYSTEM_PROMPT_TOKENS - OUTPUT_TOKENS  # ~13.8K
+    OUTPUT_TOKENS = 1024  # Reserve for LLM response (reduced for speed)
+    AVAILABLE_FOR_CHUNKS = MAX_CONTEXT_TOKENS - SYSTEM_PROMPT_TOKENS - OUTPUT_TOKENS  # ~6.6K
     
     def __init__(self, llm_client):
         """Initialize with LLM client (Ollama)."""
@@ -204,13 +204,13 @@ class AnswerGenerator:
         print(f"Usage: {(estimated_input_tokens/32768)*100:.1f}% of context window")
         print("=== END TOKEN ESTIMATE ===")
 
-        # Generate with very low temperature for JSON consistency
-        # Increased max_tokens to 4096 for detailed responses
+        # Generate with optimized settings for speed
+        # Reduced context window (8K) and max_tokens (512) for 2-3x faster generation
         # format="json" forces Ollama to output valid JSON
         raw_response = self.llm.generate(
             prompt,
-            temperature=0.2,  # Increased from 0.1 to prevent collapse
-            max_tokens=4096,
+            temperature=0.2,
+            max_tokens=512,  # Reduced from 1024 for even faster generation
             format="json"
         )
         
@@ -223,6 +223,28 @@ class AnswerGenerator:
 
         # Parse and validate JSON
         structured = self._parse_json_response(raw_response, intent_type, query)
+        
+        # Auto-generate footer from cited sources if not provided by LLM
+        if not structured.footer:
+            sources_used = set()
+            for section in structured.sections:
+                # Extract citation numbers from content and items
+                content_text = section.content or ""
+                items_text = " ".join(section.items or [])
+                all_text = content_text + " " + items_text
+                
+                citations = re.findall(r'\[(\d+)\]', all_text)
+                for citation in citations:
+                    idx = int(citation) - 1
+                    if 0 <= idx < len(chunks_to_use):
+                        doc_name = chunks_to_use[idx].get("metadata", {}).get("document_name", "")
+                        if doc_name:
+                            # Clean up document name
+                            clean_name = doc_name.replace(".pdf", "").replace("_", " ")
+                            sources_used.add(clean_name)
+            
+            if sources_used:
+                structured.footer = "Sources: " + ", ".join(sorted(sources_used))
 
         # Extract sources
         sources = self._extract_sources(chunks_to_use)

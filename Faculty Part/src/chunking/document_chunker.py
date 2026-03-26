@@ -914,6 +914,21 @@ class DocumentChunker:
     
     def clean_chunk_text(self, text: str) -> str:
         """Clean chunk text before embedding."""
+        # Strip PDF headers/footers
+        header_patterns = [
+            r'NMIMS\s*—\s*Faculty Academic Guidelines.*?CONFIDENTIAL',
+            r'Narsee Monjee Institute of Management Studies.*?Office of the Dean',
+            r'CONFIDENTIAL\s*\n',
+            r'Page\s+\d+\s+of\s+\d+',
+            r'www\.nmims\.edu',
+            r'©\s*\d{4}\s+NMIMS',
+            r'Document Version:.*?\n',
+            r'Last Updated:.*?\n',
+        ]
+        
+        for pattern in header_patterns:
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.DOTALL)
+        
         # Strip excessive whitespace
         text = re.sub(r'\s+', ' ', text)
         

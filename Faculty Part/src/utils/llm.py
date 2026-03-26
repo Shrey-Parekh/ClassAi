@@ -75,10 +75,12 @@ class LLMClient:
             "options": {
                 "temperature": temp,
                 "num_predict": max_tokens,
-                "num_ctx": 16384,  # 16K context window
+                "num_ctx": 8192,  # Reduced from 16K for faster processing
+                "num_gpu": -1,  # Use all available GPUs
+                "num_thread": 8,  # Parallel CPU threads for non-GPU ops
                 "top_p": 0.9,
                 "top_k": 40,
-                "repeat_penalty": 1.1,  # Prevents repetition in long outputs
+                "repeat_penalty": 1.1,
             }
         }
         

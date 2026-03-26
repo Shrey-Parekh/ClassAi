@@ -499,3 +499,7 @@ function _renderWithCitations(html, sources) {
 
 // Attach to window for use in sendQuery
 window._renderWithCitations = _renderWithCitations;
+
+
+// Global abort controller for stopping generation
+let currentAbortController = null;

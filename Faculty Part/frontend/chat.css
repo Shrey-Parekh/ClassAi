@@ -854,6 +854,34 @@ body {
     color: #4b5563;
 }
 
+.composer-stop {
+    position: absolute;
+    right: 0.75rem;
+    bottom: 0.75rem;
+    width: 36px;
+    height: 36px;
+    background: #dc2626;
+    border: none;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.composer-stop:hover {
+    opacity: 0.9;
+}
+
+.composer-stop i,
+.composer-stop svg {
+    width: 16px;
+    height: 16px;
+    color: #fff;
+    stroke-width: 2;
+}
+
 .composer-hint {
     font-size: 0.72rem;
     color: #374151;
