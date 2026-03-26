@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.retrieval.pipeline import RetrievalPipeline
 from src.generation.answer_generator import AnswerGenerator
 from src.utils.vector_db import VectorDBClient
-from src.utils.embeddings import EmbeddingModel
+from src.utils.query_embedder import QueryEmbedder
 from src.utils.llm import LLMClient
 from dotenv import load_dotenv
 
@@ -54,17 +54,18 @@ def main():
     try:
         # Initialize components
         vector_db = VectorDBClient(collection_name=args.collection)
-        embedding_model = EmbeddingModel()
+        embedding_model = QueryEmbedder()
         llm_client = LLMClient()
         
         # Initialize retrieval pipeline
         retrieval_pipeline = RetrievalPipeline(
             vector_db_client=vector_db,
             embedding_model=embedding_model,
-            collection_name=args.collection
+            collection_name=args.collection,
+            llm_client=llm_client
         )
         
-        # Build BM25 index
+        # Build BM25 index for hybrid search
         print("Building BM25 index...")
         retrieval_pipeline.search_engine.build_bm25_index()
         

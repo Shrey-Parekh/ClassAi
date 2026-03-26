@@ -1,26 +1,17 @@
 """
-BGE-based reranker for improved relevance scoring.
+BGE Reranker for cross-encoder based relevance scoring.
 """
 
-from typing import List
-from dataclasses import dataclass
-
-
-@dataclass
-class SearchResult:
-    """Search result with relevance score."""
-    chunk_id: str
-    content: str
-    score: float
-    metadata: dict
-    relevance_score: float = 0.0
+from typing import List, Dict, Any
+import logging
 
 
 class BGEReranker:
     """
-    Reranks search results using BGE (BAAI General Embedding) reranker.
+    Cross-encoder reranker using BAAI/bge-reranker-v2-m3.
     
-    BGE reranker reads query + chunk together for better relevance scoring.
+    Reranks retrieved chunks using a cross-encoder model that scores
+    query-document pairs directly for better relevance.
     """
     
     def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3"):
@@ -28,54 +19,66 @@ class BGEReranker:
         Initialize BGE reranker.
         
         Args:
-            model_name: BGE reranker model name
+            model_name: Reranker model name
         """
-        try:
-            from sentence_transformers import CrossEncoder
-        except ImportError:
-            raise ImportError(
-                "sentence-transformers required for BGE reranker. "
-                "Install: pip install sentence-transformers"
-            )
+        self.logger = logging.getLogger(__name__)
+        self.model_name = model_name
         
-        self.model = CrossEncoder(model_name)
-        print(f"✓ Initialized BGE reranker: {model_name}")
+        try:
+            from FlagEmbedding import FlagReranker
+            
+            self.model = FlagReranker(model_name, use_fp16=True)
+            self.logger.info(f"✓ Loaded reranker: {model_name}")
+            
+        except ImportError:
+            self.logger.error("FlagEmbedding not installed. Install: pip install FlagEmbedding")
+            raise
+        except Exception as e:
+            self.logger.error(f"Failed to load reranker: {e}")
+            raise
     
     def rerank(
         self,
         query: str,
-        results: List[SearchResult],
-        top_k: int = 5
-    ) -> List[SearchResult]:
+        results: List[Any],
+        top_k: int = 15
+    ) -> List[Any]:
         """
-        Rerank search results using BGE cross-encoder.
+        Rerank search results using cross-encoder.
         
         Args:
-            query: User query
-            results: List of search results from hybrid search
+            query: Original query text
+            results: List of SearchResult objects from hybrid search
             top_k: Number of top results to return
         
         Returns:
-            Reranked list of top-k results
+            Reranked list of SearchResult objects
         """
         if not results:
             return []
         
-        # Prepare query-document pairs
-        pairs = [[query, result.content] for result in results]
-        
-        # Get relevance scores from BGE
-        scores = self.model.predict(pairs)
-        
-        # Update results with new scores
-        for result, score in zip(results, scores):
-            result.relevance_score = float(score)
-        
-        # Sort by relevance score and return top-k
-        reranked = sorted(
-            results,
-            key=lambda x: x.relevance_score,
-            reverse=True
-        )
-        
-        return reranked[:top_k]
+        try:
+            # Prepare query-document pairs
+            pairs = [[query, result.content] for result in results]
+            
+            # Get reranker scores
+            scores = self.model.compute_score(pairs, normalize=True)
+            
+            # Handle single result case (scores is float, not list)
+            if not isinstance(scores, list):
+                scores = [scores]
+            
+            # Update result scores with reranker scores
+            for result, score in zip(results, scores):
+                result.score = float(score)
+                result.source = "reranked"
+            
+            # Sort by reranker score and return top-k
+            reranked = sorted(results, key=lambda x: x.score, reverse=True)
+            
+            return reranked[:top_k]
+            
+        except Exception as e:
+            self.logger.error(f"Reranking failed: {e}")
+            # Fallback: return original results
+            return results[:top_k]

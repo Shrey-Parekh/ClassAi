@@ -73,7 +73,7 @@ class LLMClient:
             "options": {
                 "temperature": temp,
                 "num_predict": max_tokens,
-                "num_ctx": 32768,  # 32K context window - optimal balance of speed and capacity
+                "num_ctx": 16384,  # 16K context window
                 "top_p": 0.9,
                 "top_k": 40,
                 "repeat_penalty": 1.1,  # Prevents repetition in long outputs

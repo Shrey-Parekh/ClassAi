@@ -29,12 +29,12 @@ app = FastAPI(
     version="0.1.0"
 )
 
-# CORS middleware
+# CORS middleware - configure for production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:8000", "http://localhost:3000"],  # Add your frontend URLs
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -74,16 +74,27 @@ async def startup_event():
         llm_client = LLMClient()
         
         # Create collection if it doesn't exist
-        vector_db.create_collection(
-            vector_size=query_embedder.get_dimension()
-        )
+        try:
+            vector_db.create_collection(
+                vector_size=query_embedder.get_dimension()
+            )
+        except Exception as e:
+            print(f"Collection already exists or creation failed: {e}")
         
         # Initialize retrieval pipeline
         retrieval_pipeline = RetrievalPipeline(
             vector_db_client=vector_db,
             embedding_model=query_embedder,
-            llm_client=llm_client  # For HyDE in topic search
+            llm_client=llm_client
         )
+        
+        # Build BM25 index for hybrid search
+        print("Building BM25 index...")
+        try:
+            retrieval_pipeline.search_engine.build_bm25_index()
+            print("✓ BM25 index built")
+        except Exception as e:
+            print(f"⚠ BM25 index build failed (will use dense search only): {e}")
         
         # Initialize answer generator
         answer_generator = AnswerGenerator(llm_client)
@@ -93,6 +104,8 @@ async def startup_event():
     except Exception as e:
         print(f"✗ Failed to initialize: {e}")
         print("Make sure Qdrant is running and .env is configured")
+        import traceback
+        traceback.print_exc()
 
 
 @app.get("/")
@@ -112,7 +125,7 @@ async def query_faculty_resources(request: QueryRequest):
     
     Pipeline:
     1. Intent classification
-    2. Hybrid search (vector + sparse)
+    2. Hybrid search (vector + BM25)
     3. Cross-encoder reranking
     4. Intent-based chunk limiting
     5. Structured JSON generation
@@ -120,18 +133,58 @@ async def query_faculty_resources(request: QueryRequest):
     if not retrieval_pipeline or not answer_generator:
         raise HTTPException(
             status_code=503,
-            detail="RAG system not initialized"
+            detail="RAG system not initialized. Check server logs."
+        )
+    
+    # Validate input
+    if not request.query or len(request.query.strip()) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Query cannot be empty"
+        )
+    
+    if len(request.query) > 10000:
+        raise HTTPException(
+            status_code=400,
+            detail="Query too long (max 10000 characters)"
+        )
+    
+    if request.top_k and (request.top_k < 1 or request.top_k > 50):
+        raise HTTPException(
+            status_code=400,
+            detail="top_k must be between 1 and 50"
         )
     
     try:
-        # Retrieve relevant chunks (returns top 15 after reranking)
+        # Retrieve relevant chunks
         retrieval_result = retrieval_pipeline.retrieve(
             query=request.query,
-            top_k=15  # Increased from 5 to utilize full reranked results
+            top_k=request.top_k or 15
         )
         
+        # Check if any chunks were retrieved
+        if not retrieval_result["chunks"]:
+            return QueryResponse(
+                answer=json.dumps({
+                    "intent": "general",
+                    "title": "No Results Found",
+                    "subtitle": None,
+                    "sections": [],
+                    "footer": None,
+                    "confidence": "none",
+                    "fallback": "I couldn't find any relevant information for your query. Please try rephrasing or contact support."
+                }),
+                sources=[],
+                intent=retrieval_result["intent"],
+                chunks_used=0,
+                metadata={
+                    **retrieval_result["metadata"],
+                    "domain": retrieval_result.get("domain", "general"),
+                    "entities": retrieval_result.get("entities", [])
+                }
+            )
+        
         # Generate structured JSON answer
-        # Answer generator will apply intent-based chunk limiting
         answer_result = answer_generator.generate(
             query=request.query,
             retrieved_chunks=retrieval_result["chunks"],
@@ -139,7 +192,7 @@ async def query_faculty_resources(request: QueryRequest):
         )
         
         return QueryResponse(
-            answer=json.dumps(answer_result["structured"]),  # Serialize for response
+            answer=json.dumps(answer_result["structured"]),
             sources=answer_result["sources"],
             intent=retrieval_result["intent"],
             chunks_used=answer_result["chunks_used"],
@@ -147,17 +200,21 @@ async def query_faculty_resources(request: QueryRequest):
                 **retrieval_result["metadata"],
                 "domain": retrieval_result.get("domain", "general"),
                 "entities": retrieval_result.get("entities", []),
-                "structured": answer_result["structured"]  # Include structured data
+                "structured": answer_result["structured"]
             }
         )
     
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         print(f"Error processing query: {str(e)}")
         print(traceback.format_exc())
+        
+        # Return user-friendly error
         raise HTTPException(
             status_code=500,
-            detail=f"Query processing failed: {str(e)}"
+            detail="An error occurred while processing your query. Please try again or contact support if the issue persists."
         )
 
 

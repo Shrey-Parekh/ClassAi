@@ -161,9 +161,10 @@ class ChunkPreprocessor:
     
     def _split_oversized_chunk(self, text: str) -> List[PreprocessedChunk]:
         """
-        Split oversized chunk at sentence boundaries.
+        Split oversized chunk at sentence boundaries with overlap.
         
-        Each sub-chunk inherits metadata from parent.
+        Each sub-chunk inherits metadata from parent and includes overlap
+        from previous chunk for semantic continuity.
         """
         results = []
         split_index = 0
@@ -171,13 +172,21 @@ class ChunkPreprocessor:
         # Split by sentence boundaries (. ! ?)
         sentences = re.split(r'(?<=[.!?])\s+', text)
         
+        # Overlap: keep last 2 sentences from previous chunk
+        OVERLAP_SENTENCES = 2
+        
         current_chunk = ""
+        overlap_buffer = []
+        
         for sentence in sentences:
             # Check if adding this sentence would exceed limit
             test_chunk = current_chunk + " " + sentence if current_chunk else sentence
             
             if len(test_chunk) <= self.MAX_CHARS:
                 current_chunk = test_chunk
+                overlap_buffer.append(sentence)
+                if len(overlap_buffer) > OVERLAP_SENTENCES:
+                    overlap_buffer.pop(0)
             else:
                 # Save current chunk if it has content
                 if current_chunk:
@@ -190,8 +199,14 @@ class ChunkPreprocessor:
                     ))
                     split_index += 1
                 
-                # Start new chunk with this sentence
-                current_chunk = sentence
+                # Start new chunk with overlap from previous
+                if overlap_buffer and split_index > 0:
+                    current_chunk = " ".join(overlap_buffer) + " " + sentence
+                else:
+                    current_chunk = sentence
+                
+                # Reset overlap buffer
+                overlap_buffer = [sentence]
         
         # Add final chunk
         if current_chunk:

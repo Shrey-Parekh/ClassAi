@@ -18,6 +18,7 @@ from dotenv import load_dotenv
 from src.ingestion.pipeline import IngestionPipeline
 from src.utils.vector_db import VectorDBClient
 from src.utils.dual_encoder_embeddings import DualEncoderEmbeddings
+from src.utils.llm import LLMClient
 
 # Load environment variables
 load_dotenv()
@@ -65,6 +66,14 @@ def main():
             log_file="embedding_log.jsonl"
         )
         
+        # Initialize LLM client for semantic chunking
+        try:
+            llm_client = LLMClient()
+            print("✓ LLM client initialized for semantic chunking")
+        except Exception as e:
+            print(f"⚠ LLM client initialization failed (will use rule-based chunking): {e}")
+            llm_client = None
+        
         # Create collection with 1024 dimensions (BAAI/bge-m3)
         vector_db.create_collection(
             collection_name=args.collection,
@@ -75,7 +84,8 @@ def main():
         pipeline = IngestionPipeline(
             vector_db_client=vector_db,
             embedding_model=embedding_model,
-            collection_name=args.collection
+            collection_name=args.collection,
+            llm_client=llm_client
         )
         
         # Ingest documents
@@ -110,8 +120,21 @@ def main():
             for r in failed:
                 print(f"  - {r['file_path']}: {r['error']}")
         
-        # Skip collection info (validation error with Qdrant server)
-        print("\nCollection info: (skipped due to Qdrant API compatibility)")
+        # Validate ingestion
+        print("\nValidating ingestion...")
+        try:
+            collection_info = vector_db.get_collection_info(args.collection)
+            actual_count = collection_info.get("points_count", 0)
+            
+            print(f"✓ Collection '{args.collection}' has {actual_count} points")
+            
+            if actual_count != total_stored:
+                print(f"⚠ Warning: Expected {total_stored} chunks but found {actual_count} in collection")
+            else:
+                print(f"✓ Validation passed: All {total_stored} chunks stored successfully")
+                
+        except Exception as e:
+            print(f"⚠ Could not validate collection: {e}")
         
     except Exception as e:
         print(f"\n✗ Ingestion failed: {e}")

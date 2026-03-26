@@ -609,16 +609,28 @@ class QueryAnalyzer:
     ) -> Dict[str, Any]:
         """
         Build metadata filters based on query understanding.
-
-        IMPORTANT:
-        At the moment our indexed chunks do not carry explicit ``domain`` or
-        ``is_current`` fields in their payloads. Filtering on fields that don't
-        exist in Qdrant effectively removes all candidate chunks, which makes
-        the assistant feel brittle (only very specific queries appear to work).
-
-        To maximise recall and make the system more forgiving to how users
-        phrase questions, we intentionally keep the default filters empty here.
-        When we start indexing these metadata fields, we can re‑enable
-        domain/recency filters in a controlled way.
+        
+        Filters are applied during vector search to narrow results.
+        
+        Args:
+            domain: Detected domain (faculty_info, policies, procedures)
+            is_current_only: Whether to filter for current documents
+            entities: Extracted entities (names, departments, etc.)
+        
+        Returns:
+            Dict of metadata filters for Qdrant
         """
-        return {}
+        filters = {}
+        
+        # Domain filtering
+        if domain and domain != "general":
+            filters["domain"] = domain
+        
+        # Current documents only
+        if is_current_only:
+            filters["is_current"] = True
+        
+        # Entity-based filtering (e.g., department, document type)
+        # This can be expanded based on your metadata schema
+        
+        return filters

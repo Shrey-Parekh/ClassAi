@@ -13,19 +13,3 @@ services:
       - QDRANT__SERVICE__GRPC_PORT=6334
     restart: unless-stopped
 
-  # Optional: PostgreSQL for structured data (timetables, user management)
-  # postgres:
-  #   image: postgres:15
-  #   container_name: classai_postgres
-  #   ports:
-  #     - "5432:5432"
-  #   environment:
-  #     - POSTGRES_DB=classai_faculty
-  #     - POSTGRES_USER=classai
-  #     - POSTGRES_PASSWORD=changeme
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   restart: unless-stopped
-
-# volumes:
-#   postgres_data:

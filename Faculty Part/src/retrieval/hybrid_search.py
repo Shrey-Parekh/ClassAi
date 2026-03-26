@@ -1,12 +1,11 @@
 """
-Hybrid search combining dense vectors and sparse vectors.
-
-Uses Qdrant native sparse vectors (FastEmbed) instead of BM25.
+Hybrid search combining dense vectors and BM25 sparse retrieval.
 """
 
 from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass
 import logging
+from rank_bm25 import BM25Okapi
 
 from ..utils.sparse_encoder import SparseEncoder
 
@@ -58,7 +57,12 @@ class HybridSearchEngine:
         
         self.logger = logging.getLogger(__name__)
         
-        # Initialize sparse encoder
+        # BM25 index (built on demand)
+        self.bm25_index = None
+        self.bm25_corpus = []
+        self.bm25_ids = []
+        
+        # Initialize sparse encoder (fallback)
         try:
             self.sparse_encoder = SparseEncoder(model_name="prithivida/Splade_PP_en_v1")
         except Exception as e:
@@ -172,6 +176,56 @@ class HybridSearchEngine:
             self.logger.error(f"Dense search failed: {e}")
             return []
     
+    def build_bm25_index(self):
+        """
+        Build BM25 index from all documents in collection.
+        
+        This should be called after ingestion or on startup.
+        """
+        try:
+            self.logger.info("Building BM25 index...")
+            
+            # Scroll through all documents in collection
+            all_points = []
+            offset = None
+            
+            while True:
+                results, offset = self.vector_db.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
+                all_points.extend(results)
+                
+                if offset is None:
+                    break
+            
+            # Extract corpus and IDs
+            self.bm25_corpus = []
+            self.bm25_ids = []
+            
+            for point in all_points:
+                content = point.payload.get("content", "")
+                if content:
+                    # Tokenize for BM25
+                    tokens = content.lower().split()
+                    self.bm25_corpus.append(tokens)
+                    self.bm25_ids.append(point.id)
+            
+            # Build BM25 index
+            if self.bm25_corpus:
+                self.bm25_index = BM25Okapi(self.bm25_corpus)
+                self.logger.info(f"✓ BM25 index built with {len(self.bm25_corpus)} documents")
+            else:
+                self.logger.warning("No documents found for BM25 index")
+                
+        except Exception as e:
+            self.logger.error(f"Failed to build BM25 index: {e}")
+            self.bm25_index = None
+    
     def _sparse_search(
         self,
         query: str,
@@ -179,42 +233,59 @@ class HybridSearchEngine:
         filters: Dict[str, Any] = None
     ) -> List[SearchResult]:
         """
-        Perform sparse vector search using expanded query for keywords.
+        Perform BM25 sparse search.
         
-        Note: Sparse search is currently not fully implemented in Qdrant client.
-        This is a placeholder that will be activated when Qdrant sparse vectors are available.
+        Args:
+            query: Query text
+            top_k: Number of results
+            filters: Metadata filters (not supported in BM25)
+        
+        Returns:
+            List of search results
         """
         try:
-            if not self.sparse_encoder:
+            if self.bm25_index is None:
+                self.logger.debug("BM25 index not built, skipping sparse search")
                 return []
             
-            # Encode query to sparse vector
-            sparse_query = self.sparse_encoder.encode(query)
+            # Tokenize query
+            query_tokens = query.lower().split()
             
-            if not sparse_query:
-                return []
+            # Get BM25 scores
+            scores = self.bm25_index.get_scores(query_tokens)
             
-            # Build filter if provided
-            qdrant_filter = None
-            if filters and isinstance(filters, dict):
-                qdrant_filter = self._build_filter(filters)
+            # Get top-k indices
+            top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
             
-            # NOTE: Qdrant sparse search is not yet available in the client
-            # This will be enabled when the API is ready
-            # For now, we rely on dense search only
-            self.logger.debug("Sparse search not available - using dense search only")
-            return []
+            # Fetch full documents from Qdrant
+            results = []
+            for idx in top_indices:
+                if scores[idx] > 0:  # Only include non-zero scores
+                    chunk_id = self.bm25_ids[idx]
+                    
+                    # Fetch from Qdrant
+                    try:
+                        point = self.vector_db.client.retrieve(
+                            collection_name=self.collection_name,
+                            ids=[chunk_id],
+                            with_payload=True
+                        )[0]
+                        
+                        results.append(SearchResult(
+                            chunk_id=chunk_id,
+                            content=point.payload.get("content", ""),
+                            score=float(scores[idx]),
+                            metadata=point.payload,
+                            source="sparse"
+                        ))
+                    except Exception as e:
+                        self.logger.debug(f"Failed to retrieve chunk {chunk_id}: {e}")
+                        continue
             
-            # Future implementation:
-            # results = self.vector_db.search_sparse(
-            #     collection_name=self.collection_name,
-            #     query_vector=sparse_query,
-            #     limit=top_k,
-            #     query_filter=qdrant_filter
-            # )
+            return results
             
         except Exception as e:
-            self.logger.debug(f"Sparse search not available: {e}")
+            self.logger.error(f"BM25 search failed: {e}")
             return []
     
     def _fuse_results(

@@ -36,9 +36,16 @@ class SemanticChunker:
     Core principle: A chunk must answer a question independently.
     """
     
-    def __init__(self, tokenizer=None):
-        """Initialize with optional custom tokenizer."""
+    def __init__(self, tokenizer=None, llm_client=None):
+        """
+        Initialize with optional custom tokenizer and LLM client.
+        
+        Args:
+            tokenizer: Custom tokenizer function
+            llm_client: Optional LLM client for generating overviews
+        """
         self.tokenizer = tokenizer or self._default_tokenizer
+        self.llm_client = llm_client
     
     def chunk_document(
         self,
@@ -256,14 +263,49 @@ Use this document when you need information about: {self._extract_use_cases(cont
             return ContentType.POLICY  # Default
     
     def _extract_topics(self, content: str) -> str:
-        """Extract main topics from document (placeholder for LLM call)."""
-        # In production: use LLM to extract topics
-        return "leave policies, application procedures, eligibility criteria"
+        """Extract main topics from document."""
+        if self.llm_client:
+            try:
+                prompt = f"""Extract 3-5 main topics from this document in a comma-separated list.
+
+Document excerpt:
+{content[:1000]}
+
+Topics (comma-separated):"""
+                
+                topics = self.llm_client.generate(prompt, max_tokens=100, temperature=0.3)
+                return topics.strip()
+            except Exception:
+                pass
+        
+        # Fallback: rule-based extraction
+        keywords = ["leave", "policy", "procedure", "application", "eligibility", "faculty", "research"]
+        found = [kw for kw in keywords if kw in content.lower()]
+        return ", ".join(found[:5]) if found else "general policies and procedures"
     
     def _extract_use_cases(self, content: str) -> str:
-        """Extract use cases from document (placeholder for LLM call)."""
-        # In production: use LLM to extract use cases
-        return "applying for leave, checking eligibility, understanding deadlines"
+        """Extract use cases from document."""
+        if self.llm_client:
+            try:
+                prompt = f"""What questions can this document answer? List 2-3 use cases.
+
+Document excerpt:
+{content[:1000]}
+
+Use cases (comma-separated):"""
+                
+                use_cases = self.llm_client.generate(prompt, max_tokens=100, temperature=0.3)
+                return use_cases.strip()
+            except Exception:
+                pass
+        
+        # Fallback: rule-based extraction
+        if "leave" in content.lower():
+            return "applying for leave, checking leave eligibility, understanding leave policies"
+        elif "research" in content.lower():
+            return "research funding, publication guidelines, research policies"
+        else:
+            return "faculty policies, procedures, and guidelines"
     
     def _split_large_section(
         self,

@@ -144,7 +144,91 @@ class DualEncoderEmbeddings:
         except Exception as e:
             self.logger.error(f"Failed to write log entry: {e}")
     
-    def get_stats(self) -> Dict[str, int]:
+    def embed_batch(
+        self,
+        texts: List[str],
+        chunk_ids: List[str],
+        source_files: List[str],
+        chunk_lengths: List[int]
+    ) -> List[Tuple[Optional[List[float]], Dict[str, Any]]]:
+        """
+        Embed multiple texts in batch for better performance.
+        
+        Args:
+            texts: List of cleaned chunk texts
+            chunk_ids: List of unique chunk identifiers
+            source_files: List of source document names
+            chunk_lengths: List of character counts
+        
+        Returns:
+            List of (embedding_vector, metadata_dict) tuples
+        """
+        try:
+            # Batch encode all texts at once
+            embeddings = self.model.encode(texts, convert_to_numpy=True, show_progress_bar=True)
+            
+            results = []
+            for i, (text, chunk_id, source_file, chunk_length) in enumerate(
+                zip(texts, chunk_ids, source_files, chunk_lengths)
+            ):
+                embedding = embeddings[i]
+                
+                metadata = {
+                    "embedding_model": self.model_name,
+                    "chunk_length_chars": chunk_length,
+                    "was_split": False,
+                    "split_index": None,
+                }
+                
+                log_entry = {
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "chunk_id": chunk_id,
+                    "source_file": source_file,
+                    "chunk_length_chars": chunk_length,
+                    "encoder": self.model_name,
+                    "encode_result": None,
+                    "encode_error": None,
+                    "final_result": None,
+                }
+                
+                # Validate embedding
+                if embedding is None or len(embedding) == 0:
+                    log_entry["encode_result"] = "failure"
+                    log_entry["encode_error"] = "Empty embedding"
+                    log_entry["final_result"] = "discarded"
+                    self.stats["discarded"] += 1
+                    self._write_log(log_entry)
+                    results.append((None, metadata))
+                    continue
+                
+                if any(np.isnan(v) or np.isinf(v) for v in embedding):
+                    log_entry["encode_result"] = "failure"
+                    log_entry["encode_error"] = "NaN or Inf in embedding"
+                    log_entry["final_result"] = "discarded"
+                    self.stats["discarded"] += 1
+                    self._write_log(log_entry)
+                    results.append((None, metadata))
+                    continue
+                
+                # Success
+                log_entry["encode_result"] = "success"
+                log_entry["final_result"] = "embedded"
+                self.stats["embedded"] += 1
+                self._write_log(log_entry)
+                
+                results.append((embedding.tolist(), metadata))
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Batch embedding failed: {e}")
+            # Fallback to individual embedding
+            return [
+                self.embed(text, chunk_id, source_file, chunk_length)
+                for text, chunk_id, source_file, chunk_length in zip(
+                    texts, chunk_ids, source_files, chunk_lengths
+                )
+            ]
         """Get embedding statistics."""
         return self.stats.copy()
     
