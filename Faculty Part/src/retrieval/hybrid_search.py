@@ -184,7 +184,7 @@ class HybridSearchEngine:
             # Build filter if provided
             qdrant_filter = None
             if filters and isinstance(filters, dict):
-                qdrant_filter = self._build_filter(filters)
+                qdrant_filter = self.vector_db._build_filter(filters)
             
             # Query Qdrant
             results = self.vector_db.search(
@@ -440,28 +440,3 @@ class HybridSearchEngine:
             result.score = (result.score - min_score) / (max_score - min_score)
         
         return results
-    
-    def _build_filter(self, filters: Dict[str, Any]):
-        """Build Qdrant filter from metadata filters."""
-        from qdrant_client.models import Filter, FieldCondition, MatchValue
-        
-        if not filters:
-            return None
-        
-        conditions = []
-        for key, value in filters.items():
-            if value is None:
-                continue
-            
-            if isinstance(value, list):
-                for v in value:
-                    if v is not None:
-                        conditions.append(
-                            FieldCondition(key=key, match=MatchValue(value=v))
-                        )
-            else:
-                conditions.append(
-                    FieldCondition(key=key, match=MatchValue(value=value))
-                )
-
-        return Filter(must=conditions) if conditions else None

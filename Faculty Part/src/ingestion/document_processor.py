@@ -79,6 +79,7 @@ class DocumentProcessor:
         images_found = []
         ocr_pages = 0
         ocr_failed_pages = 0
+        empty_pages = []  # K4: track per-page failures
 
         for page_num, page in enumerate(reader.pages):
             # Try text extraction first
@@ -96,6 +97,8 @@ class DocumentProcessor:
                     ocr_pages += 1
                 else:
                     ocr_failed_pages += 1
+                    if len(text.strip()) < 20:
+                        empty_pages.append(page_num + 1)
 
             # Join continuation lines to fix wrapped table rows
             text = self._join_continuation_lines(text)
@@ -139,6 +142,17 @@ class DocumentProcessor:
                 f"or is image-only. Repair with 'mutool clean -gggg in.pdf out.pdf', "
                 f"'qpdf --linearize', or re-export the source, then retry."
             )
+
+        # K4: per-page empty check — raise if >20% of pages are unrecoverable
+        if empty_pages:
+            threshold = max(1, int(page_count * 0.2))
+            if len(empty_pages) > threshold:
+                raise RuntimeError(
+                    f"'{file_path.name}': {len(empty_pages)} pages produced <20 chars "
+                    f"and OCR also failed (pages: {empty_pages}). "
+                    f"Likely font-corrupted or image-only pages. "
+                    f"Repair with 'mutool clean -gggg in.pdf out.pdf' then retry."
+                )
 
         if ocr_pages:
             print(f"[PDF] {file_path.name}: OCR used on {ocr_pages} page(s), "

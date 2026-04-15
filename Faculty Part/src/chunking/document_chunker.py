@@ -46,40 +46,46 @@ class DocumentChunker:
     def detect_source_type(self, filepath: Path) -> str:
         """
         Detect document source type from filepath and extension.
-        
+
+        Uses weighted keyword scoring so files matching multiple categories
+        (e.g. "faculty_leave_policy.pdf") resolve to the highest-scoring type.
+        Tie-breaks by priority order.
+
         Returns one of: faculty_profile, hr_policy, legal_document,
         guidelines, procedure_document, form_document, general_document
         """
         path_lower = str(filepath).lower()
-        filename = filepath.name.lower()
-        
-        # Faculty profiles (JSON/CSV)
-        if any(x in path_lower for x in ["faculty", "facult"]) and filepath.suffix in [".json", ".csv"]:
+
+        # Faculty profiles only match JSON/CSV
+        if (any(x in path_lower for x in ["faculty", "facult"])
+                and filepath.suffix in [".json", ".csv"]):
             return "faculty_profile"
-        
-        # HR policies
-        if any(x in path_lower for x in ["hr", "leave", "salary", "payroll", "employee_resource"]):
-            return "hr_policy"
-        
-        # Legal documents
-        if any(x in path_lower for x in ["legal", "compliance", "act", "statute", "agreement", "employment_agreement"]):
-            return "legal_document"
-        
-        # Forms — must be BEFORE guidelines (Compendium contains "compendium" which matches guidelines)
-        if any(x in path_lower for x in ["form", "template"]):
-            return "form_document"
-        if "application" in path_lower and "compendium" in path_lower:
-            return "form_document"
-        
-        # Guidelines and handbooks
-        if any(x in path_lower for x in ["guideline", "handbook", "manual", "resource", "compendium"]):
-            return "guidelines"
-        
-        # Procedures
-        if any(x in path_lower for x in ["procedure", "process", "sop", "application"]):
-            return "procedure_document"
-        
-        return "general_document"
+
+        keyword_map = {
+            "form_document":       ["form", "template", "compendium", "application"],
+            "procedure_document":  ["procedure", "process", "sop"],
+            "hr_policy":           ["hr", "leave", "salary", "payroll", "employee_resource"],
+            "legal_document":      ["legal", "compliance", "act", "statute", "agreement", "employment_agreement"],
+            "guidelines":          ["guideline", "handbook", "manual", "resource"],
+        }
+
+        # Priority order for tie-breaking (lower index = higher priority)
+        priority = ["form_document", "procedure_document", "hr_policy",
+                    "legal_document", "guidelines", "faculty_profile", "general_document"]
+
+        scores: Dict[str, int] = {}
+        for source_type, keywords in keyword_map.items():
+            scores[source_type] = sum(1 for kw in keywords if kw in path_lower)
+
+        self.logger.debug(f"detect_source_type scores for {filepath.name}: {scores}")
+
+        best_type = max(
+            (t for t in scores if scores[t] > 0),
+            key=lambda t: (scores[t], -priority.index(t)),
+            default=None
+        )
+
+        return best_type if best_type else "general_document"
     
     def chunk_document(
         self,
