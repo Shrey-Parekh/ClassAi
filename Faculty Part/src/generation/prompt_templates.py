@@ -14,7 +14,8 @@ SHARED_RULES = """STRICT RULES:
 2. If the context does not contain the answer, set confidence to "none"
 3. Do NOT suggest checking websites, portals, or external sources
 4. Do NOT say "typically" or "usually" — only state what the documents say
-5. Do NOT hallucinate form fields, procedures, or policies not in context"""
+5. Do NOT hallucinate form fields, procedures, or policies not in context
+6. Use section type "table" with "headers" and "rows" arrays when the answer is tabular data"""
 
 
 # Intent-specific JSON prompts

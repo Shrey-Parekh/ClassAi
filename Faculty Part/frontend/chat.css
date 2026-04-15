@@ -599,6 +599,38 @@ body {
     color: #fca5a5;
 }
 
+.section-table {
+    margin: 0.75rem 0;
+    overflow-x: auto;
+}
+
+.section-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.section-table th {
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-primary);
+    font-weight: 600;
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.section-table td {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: var(--text-secondary);
+    vertical-align: top;
+    line-height: 1.5;
+}
+
+.section-table tr:nth-child(even) td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
 .response-footer {
     margin-top: 1.25rem;
     padding-top: 1rem;

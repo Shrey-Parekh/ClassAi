@@ -1,0 +1,147 @@
+{
+  "session_id": "8277357c-22e0-4224-9a1d-434fbed3fe6b",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the leave rules for teaching staff?",
+      "timestamp": "2026-04-15T22:10:05.348457",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"eligibility\", \"title\": \"Sabbatical Leave Eligibility\", \"subtitle\": \"Faculty are eligible after 7 years of continuous service.\", \"sections\": [{\"heading\": \"Policy Rule\", \"type\": \"paragraph\", \"content\": \"Sabbatical leave is available to faculty after 7 years of continuous service.\"}, {\"heading\": \"Conditions\", \"type\": \"bullets\", \"items\": [\"Available after 7 years of continuous service\", \"For research/writing\", \"Duration: 6 months to 1 year\", \"50% pay\", \"Once in 7 years\"]}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T22:10:05.348457",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "policy_lookup"
+      }
+    },
+    {
+      "role": "user",
+      "content": "WHAT ARE THE TYPES OF LEAVES AVAILABLE TO THE FACULTY?",
+      "timestamp": "2026-04-15T22:11:34.058123",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"leave_types\", \"title\": \"Types of Leaves Available to Faculty\", \"subtitle\": null, \"sections\": [{\"heading\": \"Annual Leave\", \"type\": \"bullets\", \"items\": [\"Earned Leave (EL) - 30 days / year\", \"Casual Leave (CL) - 12 days / year\", \"Medical / Sick Leave (ML) - 12 days / year\", \"Maternity Leave - 26 weeks\", \"Paternity Leave - 15 days\", \"Special Leave (Marriage/Bereavement) - 3-5 days\"]}, {\"heading\": \"Academic Leave\", \"type\": \"bullets\", \"items\": [\"Conference Attendance - Up to 5 days per year\", \"Research Visit / Fellowship - Up to 1 year\", \"Faculty Development Programme (FDP) - Duration of FDP; mandatory institutional FDPs are on duty, others require approval\", \"Sabbatical Leave - 6 months to 1 year, available after 7 years of continuous service, 50% pay, once in 7 years\"]}, {\"heading\": \"Other Leaves\", \"type\": \"bullets\", \"items\": [\"Leave Without Pay (LWP) - As sanctioned\", \"Compensatory Off - As earned\"]}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T22:11:34.058123",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "person_lookup"
+      }
+    },
+    {
+      "role": "user",
+      "content": "can you give me the form code for Seed Grant Application Form and the Publication Incentive Claim Form",
+      "timestamp": "2026-04-15T22:14:43.396233",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Form Codes\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"The form code for the Seed Grant Application Form is HR-SG-01.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"The form code for the Publication Incentive Claim Form is HR-PB-01.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T22:14:43.398239",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "can you give me the form code for Seed Grant Application Form,, the Publication Incentive Claim Form, Leave application form, Travel Expenses claim form, seed grant form, conference travel form (all the forms)",
+      "timestamp": "2026-04-15T22:17:36.874043",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Forms List\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"Here's a list of the form codes for the requested forms:\\n\\n*   Seed Grant Application Form: HR-SG-01\\n*   Publication Incentive Claim Form: HR-PB-01\\n*   Leave Application Form: HR-LA-01\\n*   Travel Expense Claim Form: HR-TE-02\\n*   Conference / Research Travel Request: HR-CR-01\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T22:17:36.875044",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Tel me more about the teaching standards and obligations",
+      "timestamp": "2026-04-15T22:24:05.080542",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Response Error\", \"subtitle\": null, \"sections\": [], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines\", \"confidence\": \"none\", \"fallback\": \"I was unable to format a response properly. Please rephrase your question or contact HR directly.\"}",
+      "timestamp": "2026-04-15T22:24:05.081542",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-04-15T22:10:05.348457",
+  "updated_at": "2026-04-15T22:24:05.081542"
+}

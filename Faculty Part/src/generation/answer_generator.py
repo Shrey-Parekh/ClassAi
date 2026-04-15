@@ -43,6 +43,8 @@ TYPE_ALIASES = {
     "note": "alert",
     "callout": "alert",
     "bullet_points": "bullets",
+    "grid": "table",
+    "matrix": "table",
     "bullet": "bullets",
     "numbered_list": "steps",
     "step_by_step": "steps",
@@ -391,6 +393,22 @@ class AnswerGenerator:
                         if correct_field == "content" and wrong_field in section:
                             section["content"] = section.pop(wrong_field)
                 
+                elif section_type == "table":
+                    # Normalize table: LLM may send content as list of dicts
+                    # Convert to headers + rows format
+                    if "content" in section and isinstance(section["content"], list):
+                        raw_rows = section.pop("content")
+                        if raw_rows and isinstance(raw_rows[0], dict):
+                            section["headers"] = list(raw_rows[0].keys())
+                            section["rows"] = [
+                                [str(v) for v in row.values()] for row in raw_rows
+                            ]
+                        else:
+                            section.setdefault("headers", [])
+                            section.setdefault("rows", [])
+                    section.setdefault("headers", [])
+                    section.setdefault("rows", [])
+
                 elif section_type == "alert":
                     # Ensure severity exists
                     if "severity" not in section:

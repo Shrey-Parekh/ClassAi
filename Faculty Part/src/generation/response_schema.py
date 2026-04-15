@@ -35,8 +35,16 @@ class AlertSection(BaseModel):
     severity: Literal["info", "warning", "important"] = "info"
 
 
+class TableSection(BaseModel):
+    """Table section with headers and rows."""
+    heading: Optional[str] = None
+    type: Literal["table"] = "table"
+    headers: List[str] = []
+    rows: List[List[str]] = []
+
+
 # Union type for all section types
-Section = ParagraphSection | BulletsSection | StepsSection | AlertSection
+Section = ParagraphSection | BulletsSection | StepsSection | TableSection | AlertSection
 
 
 class StructuredResponse(BaseModel):
