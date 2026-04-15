@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8001';
+const API_URL = 'http://localhost:8000';
 
 const messages = document.getElementById('messages');
 const userInput = document.getElementById('userInput');
@@ -6,6 +6,31 @@ const sendBtn = document.getElementById('sendBtn');
 const roleLabel = document.getElementById('roleLabel');
 const welcomeScreen = document.getElementById('welcomeScreen');
 const messagesContainer = document.getElementById('messagesContainer');
+const mobileMenuToggle = document.getElementById('mobileMenuToggle');
+const sidebar = document.querySelector('.sidebar');
+const mobileBackdrop = document.getElementById('mobileBackdrop');
+
+// Mobile menu toggle
+if (mobileMenuToggle && sidebar && mobileBackdrop) {
+    mobileMenuToggle.addEventListener('click', () => {
+        sidebar.classList.toggle('open');
+        mobileBackdrop.classList.toggle('active');
+    });
+    
+    // Close sidebar when clicking backdrop
+    mobileBackdrop.addEventListener('click', () => {
+        sidebar.classList.remove('open');
+        mobileBackdrop.classList.remove('active');
+    });
+    
+    // Close sidebar when window is resized above mobile breakpoint
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            sidebar.classList.remove('open');
+            mobileBackdrop.classList.remove('active');
+        }
+    });
+}
 
 // Session management
 let currentSessionId = null;
@@ -80,6 +105,24 @@ function addMessage(content, isUser, sources = null) {
     
     wrapper.appendChild(label);
     wrapper.appendChild(contentDiv);
+    
+    // Add copy button for assistant messages
+    if (!isUser) {
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'message-actions';
+        
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'copy-btn';
+        copyBtn.innerHTML = `
+            <svg data-lucide="copy"></svg>
+            <span>Copy</span>
+        `;
+        copyBtn.onclick = () => copyMessage(contentDiv, copyBtn);
+        
+        actionsDiv.appendChild(copyBtn);
+        wrapper.appendChild(actionsDiv);
+    }
+    
     messageDiv.appendChild(wrapper);
     messages.appendChild(messageDiv);
     
@@ -88,6 +131,11 @@ function addMessage(content, isUser, sources = null) {
     }
     
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    // Re-render lucide icons
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
+    }
     
     return { messageDiv, contentDiv, wrapper };
 }
@@ -99,20 +147,43 @@ function showThinking() {
     }
     
     const thinkingBlock = document.createElement('div');
-    thinkingBlock.className = 'thinking-block';
+    thinkingBlock.className = 'message assistant thinking-message';
     thinkingBlock.id = 'thinkingBlock';
     thinkingBlock.innerHTML = `
-        <div class="thinking-content">
-            <span class="thinking-label">Processing</span>
-            <div class="thinking-box">
-                <div class="thinking-steps" id="thinkingSteps">
-                    <div class="thinking-step active" data-step="understanding">
-                        <div class="thinking-step-icon"></div>
-                        <div class="thinking-step-text">
-                            <div class="thinking-step-name">Understanding query</div>
-                            <div class="thinking-step-detail">Analyzing intent and context...</div>
-                        </div>
+        <div class="message-wrapper">
+            <span class="message-label">CLASSAI</span>
+            <div class="message-content">
+                <div class="thinking-scan-container">
+                    <div class="thinking-scan-line"></div>
+                    <div class="thinking-doc-line">
+                        <span class="thinking-frag" style="width: 52px;"></span>
+                        <span class="thinking-frag" style="width: 88px;"></span>
+                        <span class="thinking-frag highlight h1" style="width: 64px;"></span>
+                        <span class="thinking-frag" style="width: 40px;"></span>
+                        <span class="thinking-frag" style="width: 72px;"></span>
+                        <span class="thinking-frag highlight h2" style="width: 56px;"></span>
+                        <span class="thinking-frag" style="width: 36px;"></span>
                     </div>
+                    <div class="thinking-doc-line">
+                        <span class="thinking-frag" style="width: 44px;"></span>
+                        <span class="thinking-frag highlight h3" style="width: 80px;"></span>
+                        <span class="thinking-frag" style="width: 60px;"></span>
+                        <span class="thinking-frag" style="width: 48px;"></span>
+                        <span class="thinking-frag" style="width: 32px;"></span>
+                        <span class="thinking-frag" style="width: 68px;"></span>
+                    </div>
+                    <div class="thinking-doc-line">
+                        <span class="thinking-frag" style="width: 64px;"></span>
+                        <span class="thinking-frag" style="width: 40px;"></span>
+                        <span class="thinking-frag" style="width: 56px;"></span>
+                        <span class="thinking-frag highlight h4" style="width: 72px;"></span>
+                        <span class="thinking-frag" style="width: 48px;"></span>
+                    </div>
+                </div>
+                <div class="thinking-citations">
+                    <span class="thinking-cite c1">[1]</span>
+                    <span class="thinking-cite c2">[2]</span>
+                    <span class="thinking-cite c3">[3]</span>
                 </div>
             </div>
         </div>
@@ -126,29 +197,7 @@ function showThinking() {
 
 // Update thinking status
 function updateThinkingStep(stepName, detail, isComplete = false) {
-    const stepsContainer = document.getElementById('thinkingSteps');
-    if (!stepsContainer) return;
-    
-    // Mark previous steps as completed
-    const activeSteps = stepsContainer.querySelectorAll('.thinking-step.active');
-    activeSteps.forEach(step => {
-        step.classList.remove('active');
-        step.classList.add('completed');
-    });
-    
-    // Add new step
-    const stepDiv = document.createElement('div');
-    stepDiv.className = isComplete ? 'thinking-step completed' : 'thinking-step active';
-    stepDiv.innerHTML = `
-        <div class="thinking-step-icon"></div>
-        <div class="thinking-step-text">
-            <div class="thinking-step-name">${stepName}</div>
-            <div class="thinking-step-detail">${detail}</div>
-        </div>
-    `;
-    
-    stepsContainer.appendChild(stepDiv);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    // No-op: document scan animation doesn't use steps
 }
 
 // Show typing indicator
@@ -417,7 +466,42 @@ async function sendQuery(query) {
     } catch (error) {
         removeThinking();
         const { contentDiv } = addMessage('', false);
-        contentDiv.textContent = 'Sorry, I encountered an error. Please try again.';
+        
+        // Determine error type and show specific message
+        let errorMessage = 'Sorry, I encountered an error. Please try again.';
+        let errorDetails = '';
+        
+        if (error.message) {
+            const msg = error.message.toLowerCase();
+            
+            if (msg.includes('rate limit') || msg.includes('429')) {
+                errorMessage = 'Rate Limit Reached';
+                errorDetails = 'Too many requests. Please wait a moment and try again.';
+            } else if (msg.includes('timeout') || msg.includes('timed out')) {
+                errorMessage = 'Request Timeout';
+                errorDetails = 'The request took too long. Please try a simpler query or try again.';
+            } else if (msg.includes('network') || msg.includes('fetch')) {
+                errorMessage = 'Connection Error';
+                errorDetails = 'Unable to reach the server. Please check your connection and try again.';
+            } else if (msg.includes('no relevant') || msg.includes('not found')) {
+                errorMessage = 'No Information Found';
+                errorDetails = 'I couldn\'t find relevant information for your query. Try rephrasing or being more specific.';
+            } else if (msg.includes('503') || msg.includes('not initialized')) {
+                errorMessage = 'Service Unavailable';
+                errorDetails = 'The system is starting up or temporarily unavailable. Please try again in a moment.';
+            } else {
+                errorMessage = 'Something Went Wrong';
+                errorDetails = 'An unexpected error occurred. Please try again or contact support if the issue persists.';
+            }
+        }
+        
+        contentDiv.innerHTML = `
+            <div class="response-section">
+                <h3 class="section-heading" style="color: #ef4444;">${errorMessage}</h3>
+                <p class="section-paragraph">${errorDetails}</p>
+            </div>
+        `;
+        
         console.error('Error:', error);
     } finally {
         sendBtn.disabled = false;
@@ -485,16 +569,8 @@ userInput.focus();
 
 // Render citations as superscripts with tooltips
 function _renderWithCitations(html, sources) {
-    // Replace [N] with superscript citations
-    return html.replace(/\[(\d+)\]/g, (match, num) => {
-        const sourceIndex = parseInt(num) - 1;
-        if (sources && sources[sourceIndex]) {
-            const source = sources[sourceIndex];
-            const title = source.title || source.doc_id || 'Unknown';
-            return `<sup class="citation" data-source="${num}" title="${title}">[${num}]</sup>`;
-        }
-        return `<sup class="citation">[${num}]</sup>`;
-    });
+    // Strip citation numbers [N] from the text instead of rendering them
+    return html.replace(/\[(\d+)\]/g, '');
 }
 
 // Attach to window for use in sendQuery
@@ -502,4 +578,62 @@ window._renderWithCitations = _renderWithCitations;
 
 
 // Global abort controller for stopping generation
-let currentAbortController = null;
+let currentAbortController = null;
+
+// Copy message to clipboard
+async function copyMessage(contentDiv, button) {
+    try {
+        // Get text content, stripping HTML
+        const text = contentDiv.innerText || contentDiv.textContent;
+        
+        await navigator.clipboard.writeText(text);
+        
+        // Update button state
+        const originalHTML = button.innerHTML;
+        button.classList.add('copied');
+        button.innerHTML = `
+            <svg data-lucide="check"></svg>
+            <span>Copied!</span>
+        `;
+        
+        // Re-render icons
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        }
+        
+        // Reset after 2 seconds
+        setTimeout(() => {
+            button.classList.remove('copied');
+            button.innerHTML = originalHTML;
+            if (typeof lucide !== 'undefined') {
+                lucide.createIcons();
+            }
+        }, 2000);
+        
+    } catch (error) {
+        console.error('Failed to copy:', error);
+        
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = contentDiv.innerText || contentDiv.textContent;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.select();
+        
+        try {
+            document.execCommand('copy');
+            button.classList.add('copied');
+            button.querySelector('span').textContent = 'Copied!';
+            
+            setTimeout(() => {
+                button.classList.remove('copied');
+                button.querySelector('span').textContent = 'Copy';
+            }, 2000);
+        } catch (err) {
+            console.error('Fallback copy failed:', err);
+        }
+        
+        document.body.removeChild(textArea);
+    }
+}

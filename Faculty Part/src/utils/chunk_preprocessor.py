@@ -87,7 +87,11 @@ class ChunkPreprocessor:
         """
         Strip whitespace and collapse multiple spaces/newlines.
         Remove control characters (ASCII < 32 except newline).
+        Protect tables from being collapsed.
         """
+        # Protect tables first
+        text = self._protect_tables(text)
+        
         # Strip leading/trailing whitespace
         text = text.strip()
         
@@ -101,6 +105,52 @@ class ChunkPreprocessor:
         text = re.sub(r'\s+', ' ', text)
         
         return text.strip()
+    
+    def _is_table_row(self, line: str) -> bool:
+        """
+        Detect if a line is part of a table.
+        
+        Table rows typically have:
+        - Multiple pipe separators (|)
+        - Multiple tab separators
+        - Repeated whitespace blocks (PDF table extraction pattern)
+        """
+        return (
+            line.count('|') >= 2 or
+            line.count('\t') >= 2 or
+            # Repeated whitespace blocks (PDF table extraction pattern)
+            len(re.findall(r'\s{3,}', line)) >= 2
+        )
+    
+    def _protect_tables(self, text: str) -> str:
+        """
+        Keep table rows together — don't split mid-table.
+        
+        Detects table blocks and preserves their structure by
+        keeping consecutive table rows together.
+        """
+        lines = text.split('\n')
+        result = []
+        in_table = False
+        table_buffer = []
+        
+        for line in lines:
+            if self._is_table_row(line):
+                in_table = True
+                table_buffer.append(line)
+            else:
+                if in_table and table_buffer:
+                    # End of table - add as single block
+                    result.append('\n'.join(table_buffer))
+                    table_buffer = []
+                    in_table = False
+                result.append(line)
+        
+        # Handle table at end of text
+        if table_buffer:
+            result.append('\n'.join(table_buffer))
+        
+        return '\n'.join(result)
     
     def _ensure_utf8_safe(self, text: str) -> str:
         """

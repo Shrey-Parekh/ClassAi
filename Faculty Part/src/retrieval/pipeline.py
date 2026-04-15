@@ -97,7 +97,7 @@ class RetrievalPipeline:
                             "initial_results": len(direct_results),
                             "final_results": len(direct_results),
                             "filters_applied": {},
-                            "is_current_only": understanding.is_current_only,
+                            "is_current_only_detected": understanding.is_current_only,
                             "name_boost_applied": False
                         }
                     }
@@ -225,7 +225,7 @@ class RetrievalPipeline:
                 "initial_results": len(search_results),
                 "final_results": len(chunks),
                 "filters_applied": understanding.metadata_filters,
-                "is_current_only": understanding.is_current_only,
+                "is_current_only_detected": understanding.is_current_only,
                 "name_boost_applied": name_boost > 0
             }
         }
@@ -307,7 +307,7 @@ Write only the sentence, nothing else."""
                 chunks = [
                     {
                         "chunk_id": point.id,
-                        "content": point.payload.get("content", ""),
+                        "text": point.payload.get("content", ""),  # Use "text" key for consistency
                         "score": 1.0,  # Direct match gets perfect score
                         "metadata": point.payload,
                     }

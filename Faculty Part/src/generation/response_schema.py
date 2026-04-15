@@ -10,28 +10,28 @@ class ParagraphSection(BaseModel):
     """Paragraph section with heading and content."""
     heading: Optional[str] = None
     type: Literal["paragraph"] = "paragraph"
-    content: str
+    content: str = ""
 
 
 class BulletsSection(BaseModel):
     """Bullet list section."""
     heading: Optional[str] = None
     type: Literal["bullets"] = "bullets"
-    items: List[str]
+    items: List[str] = []
 
 
 class StepsSection(BaseModel):
     """Numbered steps section."""
     heading: Optional[str] = None
     type: Literal["steps"] = "steps"
-    items: List[str]
+    items: List[str] = []
 
 
 class AlertSection(BaseModel):
     """Alert/callout section."""
     heading: Optional[str] = None
     type: Literal["alert"] = "alert"
-    content: str
+    content: str = ""
     severity: Literal["info", "warning", "important"] = "info"
 
 

@@ -1,0 +1,47 @@
+{
+  "session_id": "22362d16-877e-4094-8ea8-6378a6002d37",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the leave rules for teaching staff?",
+      "timestamp": "2026-03-30T12:43:30.807058",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"leave_policies\", \"title\": \"Leave Policies for Faculty\", \"subtitle\": null, \"sections\": [{\"heading\": \"General Leave Framework\", \"type\": \"paragraph\", \"content\": \"NMIMS provides a comprehensive leave framework designed to support faculty wellbeing while ensuring academic continuity. All leaves are governed by the provisions in the Employee Resource Book (ERB) and must be applied for through the NMIMS HR Management System (HRMS) at hrms.nmims.edu.\"}, {\"heading\": \"Leave Entitlements\", \"type\": \"bullets\", \"items\": [\"Earned Leave (EL): 30 days / year\", \"Casual Leave (CL): 12 days / year\", \"Medical / Sick Leave (ML): 12 days / year\", \"Maternity Leave: 26 weeks\", \"Paternity Leave: 15 days\", \"Compensatory Off: As earned\", \"Academic Leave (Conference/FDP): As approved\", \"Sabbatical Leave: 6-12 months (after 7 years)\", \"Leave Without Pay (LWP): As sanctioned\"]}, {\"heading\": \"Leave Without Pay (LWP)\", \"type\": \"paragraph\", \"content\": \"When a faculty member exhausts all paid leave entitlements, additional absence may be sanctioned as Leave Without Pay at the discretion of the institution. LWP is not a right and is granted only in exceptional circumstances. Continuous LWP exceeding 30 days without prior sanction may result in termination of service.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines, NMIMS Faculty Applications Compendium, NMIMS Faculty Employment Agreement Legal\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-30T12:43:30.811612",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-30T12:43:30.807058",
+  "updated_at": "2026-03-30T12:43:30.811612"
+}

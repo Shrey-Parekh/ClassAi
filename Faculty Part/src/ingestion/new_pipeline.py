@@ -16,7 +16,6 @@ import torch
 
 from ..chunking.document_chunker import DocumentChunker
 from .document_processor import DocumentProcessor
-from ..utils.sparse_encoder import SparseEncoder
 
 
 class NewIngestionPipeline:
@@ -66,15 +65,6 @@ class NewIngestionPipeline:
             device=device
         )
         print(f"      ✓ Embedding model loaded on {device}")
-        
-        # Initialize sparse encoder
-        print("\n[4/4] Initializing sparse encoder...")
-        try:
-            self.sparse_encoder = SparseEncoder(model_name="prithivida/Splade_PP_en_v1")
-            print("      ✓ Sparse encoder loaded")
-        except Exception as e:
-            print(f"      ⚠ Sparse encoder not available: {e}")
-            self.sparse_encoder = None
         
         print("\n" + "="*60)
         print("INITIALIZATION COMPLETE")
@@ -139,13 +129,11 @@ class NewIngestionPipeline:
                 # Embed
                 try:
                     dense_vector = self._embed_text(clean_text)
-                    sparse_vector = self._compute_sparse(clean_text)
                     
                     # Store in Qdrant
                     self._store_chunk(
                         text=clean_text,
                         dense_vector=dense_vector,
-                        sparse_vector=sparse_vector,
                         metadata=chunk.metadata
                     )
                     
@@ -269,42 +257,28 @@ class NewIngestionPipeline:
         )
         return embedding.tolist()
     
-    def _compute_sparse(self, text: str) -> Dict[int, float]:
-        """
-        Compute sparse vector using SPLADE.
-        
-        Args:
-            text: Text to encode
-        
-        Returns:
-            Sparse vector as dict
-        """
-        if not self.sparse_encoder:
-            return {}
-        
-        try:
-            return self.sparse_encoder.encode(text)
-        except Exception as e:
-            self.logger.debug(f"Sparse encoding failed: {e}")
-            return {}
-    
     def _store_chunk(
         self,
         text: str,
         dense_vector: List[float],
-        sparse_vector: Dict[int, float],
         metadata: Dict[str, Any]
     ):
         """Store chunk with embeddings in Qdrant."""
         # Generate unique ID
-        chunk_id_str = f"{metadata.get('document_name', '')}_{metadata.get('section_index', 0)}_{metadata.get('sub_index', 0)}"
+        chunk_id_str = "|".join([
+            metadata.get("document_name", ""),
+            str(metadata.get("section_index", 0)),
+            str(metadata.get("sub_section_index", metadata.get("sub_index", 0))),
+            str(metadata.get("section_letter", "")),
+            str(metadata.get("chunk_type", "")),
+        ])
         chunk_id_int = int(hashlib.md5(chunk_id_str.encode()).hexdigest()[:16], 16)
         
         # Prepare payload
         payload = {
             "content": text,  # Use "content" to match BM25 index expectations
             "char_count": len(text),
-            "token_count": len(text) // 4,  # Approximate
+            "token_count": int(len(text.split()) * 1.3),  # Word-based estimation for consistency
             **metadata
         }
         

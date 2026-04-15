@@ -259,6 +259,18 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     7. Structured JSON generation (with LLM semaphore)
     8. Save to conversation history
     """
+    # ── Sanitize and log query ──────────────────────────────────────
+    import re
+    raw_query = request.query or ""
+    query = re.sub(r'\s+', ' ', raw_query).strip()
+    
+    print(f"\n{'='*50}")
+    print(f"[QUERY] Raw: '{raw_query[:80]}'")
+    print(f"[QUERY] Clean: '{query[:80]}'")
+    print(f"[QUERY] Session: {request.session_id}")
+    print(f"[QUERY] Stream: {request.stream}")
+    print(f"{'='*50}")
+    
     if not retrieval_pipeline or not answer_generator:
         raise HTTPException(
             status_code=503,
@@ -276,13 +288,19 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         )
     
     # Validate input
-    if not request.query or len(request.query.strip()) == 0:
+    if not query or len(query) == 0:
         raise HTTPException(
             status_code=400,
             detail="Query cannot be empty"
         )
     
-    if len(request.query) > 10000:
+    if len(query) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Query too short (minimum 2 characters)"
+        )
+    
+    if len(query) > 10000:
         raise HTTPException(
             status_code=400,
             detail="Query too long (max 10000 characters)"
@@ -293,6 +311,9 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
             status_code=400,
             detail="top_k must be between 1 and 50"
         )
+    
+    # Update request with sanitized query
+    request.query = query
     
     # Handle streaming request
     if request.stream:
@@ -486,6 +507,8 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         SSE formatted events with progressive response
     """
     try:
+        print(f"[SSE] Starting stream for: '{request.query[:60]}'")
+        
         # Send initial event
         yield f"event: status\ndata: {json.dumps({'step': 'understanding', 'message': 'Analyzing query...'})}\n\n"
         await asyncio.sleep(0.1)
@@ -493,12 +516,14 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         # Check cache
         cached_result = cache_manager.get_query_result(request.query, request.top_k or 15)
         if cached_result:
+            print(f"[SSE] Cache hit")
             yield f"event: status\ndata: {json.dumps({'step': 'cache_hit', 'message': 'Found cached result'})}\n\n"
             yield f"event: result\ndata: {json.dumps(cached_result)}\n\n"
             yield "event: done\ndata: {}\n\n"
             return
         
         # Retrieve chunks
+        print(f"[SSE] Starting retrieval")
         yield f"event: status\ndata: {json.dumps({'step': 'retrieval', 'message': 'Searching knowledge base...'})}\n\n"
         
         retrieval_result = await asyncio.to_thread(
@@ -507,12 +532,16 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
             top_k=request.top_k or 15
         )
         
+        print(f"[SSE] Retrieval complete: {len(retrieval_result['chunks'])} chunks")
+        
         if not retrieval_result["chunks"]:
+            print(f"[SSE] No chunks found")
             yield f"event: error\ndata: {json.dumps({'message': 'No relevant documents found'})}\n\n"
             yield "event: done\ndata: {}\n\n"
             return
         
         # Generate answer
+        print(f"[SSE] Starting generation")
         yield f"event: status\ndata: {json.dumps({'step': 'generation', 'message': 'Generating answer...'})}\n\n"
         
         answer_result = await asyncio.to_thread(
@@ -521,6 +550,8 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
             retrieved_chunks=retrieval_result["chunks"],
             intent_type=retrieval_result["intent"]
         )
+        
+        print(f"[SSE] Generation complete")
         
         # Send result
         result = {
@@ -546,8 +577,19 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         
         yield f"event: result\ndata: {json.dumps(result)}\n\n"
         yield "event: done\ndata: {}\n\n"
+        print(f"[SSE] Stream complete")
         
     except Exception as e:
+        import traceback
+        print("=" * 80)
+        print("[SSE ERROR] Exception in stream handler")
+        print("=" * 80)
+        print(f"Error type: {type(e).__name__}")
+        print(f"Error message: {str(e)}")
+        print("\nFull traceback:")
+        print(traceback.format_exc())
+        print("=" * 80)
+        
         yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
         yield "event: done\ndata: {}\n\n"
 

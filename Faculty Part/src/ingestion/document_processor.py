@@ -74,19 +74,31 @@ class DocumentProcessor:
         Extracts text directly where possible, uses OCR for scanned pages.
         """
         reader = PdfReader(file_path)
-        
+
         pages_content = []
         images_found = []
-        
+        ocr_pages = 0
+        ocr_failed_pages = 0
+
         for page_num, page in enumerate(reader.pages):
             # Try text extraction first
-            text = page.extract_text()
-            
-            # If minimal text, likely scanned - use OCR
+            try:
+                text = page.extract_text() or ""
+            except Exception as e:
+                print(f"[PDF] extract_text failed on page {page_num + 1}: {e}")
+                text = ""
+
+            # If minimal text, likely scanned or font-corrupted - use OCR fallback
             if len(text.strip()) < 50:
-                # Extract page as image and OCR
-                # Note: This requires pdf2image library
-                text = self._ocr_pdf_page(page)
+                ocr_text = self._ocr_pdf_page(file_path, page_num + 1)
+                if ocr_text and ocr_text.strip():
+                    text = ocr_text
+                    ocr_pages += 1
+                else:
+                    ocr_failed_pages += 1
+
+            # Join continuation lines to fix wrapped table rows
+            text = self._join_continuation_lines(text)
             
             pages_content.append({
                 "page_num": page_num + 1,
@@ -112,15 +124,36 @@ class DocumentProcessor:
         
         # Combine all text
         full_text = "\n\n".join([p["content"] for p in pages_content])
-        
+
+        # Surface silent-drop failures: a PDF with no recoverable text should
+        # raise rather than ingest as an empty document.
+        total_chars = len(full_text.strip())
+        page_count = len(reader.pages)
+        min_expected = max(200, page_count * 50)
+        if total_chars < min_expected:
+            raise RuntimeError(
+                f"PDF extraction produced only {total_chars} chars across "
+                f"{page_count} pages for '{file_path.name}' "
+                f"(ocr_pages={ocr_pages}, ocr_failed_pages={ocr_failed_pages}). "
+                f"The PDF is likely scanned without OCR, has corrupted embedded fonts, "
+                f"or is image-only. Repair with 'mutool clean -gggg in.pdf out.pdf', "
+                f"'qpdf --linearize', or re-export the source, then retry."
+            )
+
+        if ocr_pages:
+            print(f"[PDF] {file_path.name}: OCR used on {ocr_pages} page(s), "
+                  f"{ocr_failed_pages} OCR failure(s)")
+
         return {
             "content": full_text,
             "pages": pages_content,
             "images": images_found,
             "metadata": {
                 **doc_metadata,
-                "page_count": len(reader.pages),
+                "page_count": page_count,
                 "has_images": len(images_found) > 0,
+                "ocr_pages": ocr_pages,
+                "ocr_failed_pages": ocr_failed_pages,
             }
         }
     
@@ -271,44 +304,42 @@ class DocumentProcessor:
         }
     
     def _build_faculty_text_from_dict(self, obj: Dict[str, Any]) -> str:
-        """
-        Build faculty text from dictionary fields.
-        
-        Handles cases where 'text' field doesn't exist.
-        """
+        """Build clean readable faculty text from dictionary fields."""
         parts = []
         
-        # Name
         if 'name' in obj:
             parts.append(f"Name: {obj['name']}")
         
-        # Qualification
-        if 'qualification' in obj:
-            parts.append(f"Qualification: {obj['qualification']}")
+        # Skip "Not specified" fields — they add noise
+        for field in ['qualification', 'experience', 'research_interests']:
+            if field in obj:
+                value = str(obj[field]).strip()
+                if value and value.lower() != 'not specified':
+                    parts.append(f"{field.replace('_', ' ').title()}: {value}")
         
-        # Experience
-        if 'experience' in obj:
-            parts.append(f"Experience: {obj['experience']}")
-        
-        # Research Interests
-        if 'research_interests' in obj:
-            parts.append(f"Research Interests: {obj['research_interests']}")
-        
-        # Publications
+        # Handle publications as nested dict
         if 'publications' in obj:
-            parts.append(f"Publications: {obj['publications']}")
+            pubs = obj['publications']
+            if isinstance(pubs, dict):
+                for pub_type, pub_list in pubs.items():
+                    if isinstance(pub_list, list) and pub_list:
+                        parts.append(f"\n{pub_type.title()}:")
+                        for pub in pub_list:
+                            parts.append(f"  - {pub}")
+            elif isinstance(pubs, list) and pubs:
+                parts.append("Publications:")
+                for pub in pubs:
+                    parts.append(f"  - {pub}")
         
-        # Awards
+        # Handle awards as list
         if 'awards' in obj:
-            parts.append(f"Awards: {obj['awards']}")
+            awards = obj['awards']
+            if isinstance(awards, list) and awards:
+                parts.append("\nAwards:")
+                for award in awards:
+                    parts.append(f"  - {award}")
         
-        # Any other fields
-        for key, value in obj.items():
-            if key not in ['name', 'qualification', 'experience', 'research_interests', 
-                          'publications', 'awards', 'profile_url', 'text', 'metadata']:
-                parts.append(f"{key.replace('_', ' ').title()}: {value}")
-        
-        return " ".join(parts)
+        return "\n".join(parts)
     
     def _split_faculty_profile(
         self,
@@ -529,14 +560,49 @@ class DocumentProcessor:
             }
         }
     
-    def _ocr_pdf_page(self, page) -> str:
-        """OCR a PDF page (requires pdf2image)."""
-        # Placeholder - implement with pdf2image
-        # from pdf2image import convert_from_path
-        # images = convert_from_path(pdf_path, first_page=page_num, last_page=page_num)
-        # return pytesseract.image_to_string(images[0])
-        return "[OCR extraction not implemented]"
-    
+    def _ocr_pdf_page(self, file_path: Path, page_num: int) -> str:
+        """
+        OCR a single PDF page using pdf2image + pytesseract.
+
+        Args:
+            file_path: Path to the PDF file
+            page_num: 1-indexed page number
+
+        Returns:
+            Extracted text, or empty string on failure.
+        """
+        try:
+            from pdf2image import convert_from_path
+        except ImportError:
+            print("[OCR] pdf2image not installed. Install: pip install pdf2image "
+                  "(and ensure poppler is available on PATH)")
+            return ""
+
+        try:
+            images = convert_from_path(
+                str(file_path),
+                first_page=page_num,
+                last_page=page_num,
+                dpi=300,
+            )
+        except Exception as e:
+            print(f"[OCR] pdf2image failed for {file_path.name} p{page_num}: {e}")
+            return ""
+
+        if not images:
+            return ""
+
+        try:
+            text = pytesseract.image_to_string(images[0])
+        except Exception as e:
+            print(f"[OCR] tesseract failed for {file_path.name} p{page_num}: {e}")
+            text = ""
+        finally:
+            for img in images:
+                img.close()
+
+        return text or ""
+
     def _extract_pdf_image(self, image_obj) -> Optional[Dict[str, str]]:
         """Extract and process image from PDF."""
         try:
@@ -544,16 +610,16 @@ class DocumentProcessor:
             # This is simplified - actual implementation depends on PDF structure
             size = (image_obj['/Width'], image_obj['/Height'])
             data = image_obj.get_data()
-            
+
             # Convert to PIL Image
             image = Image.open(io.BytesIO(data))
-            
+
             # OCR
             ocr_text = pytesseract.image_to_string(image)
-            
+
             # Generate description
             description = self._generate_image_description(image)
-            
+
             return {
                 "ocr_text": ocr_text,
                 "description": description,
@@ -561,12 +627,57 @@ class DocumentProcessor:
         except Exception as e:
             print(f"Error extracting image: {e}")
             return None
-    
+
     def _generate_image_description(self, image: Image.Image) -> str:
         """
         Generate textual description of image content.
-        
+
         In production: use vision-language model (CLIP, BLIP, GPT-4V, etc.)
         """
         # Placeholder - implement with vision model
         return f"[Image: {image.size[0]}x{image.size[1]} pixels]"
+
+    def _join_continuation_lines(self, text: str) -> str:
+        """Join lines that are continuations of the previous line.
+
+        Does NOT merge when either line looks like a table row — this
+        preserves two-column tables (parameter | value) in ERB and FAG.
+
+        >>> proc = DocumentProcessor()
+        >>> proc._join_continuation_lines("Parameter   Value\\nlower cell")
+        'Parameter   Value\\nlower cell'
+        >>> proc._join_continuation_lines("This is a long\\nsentence continued")
+        'This is a long sentence continued'
+        """
+        _table_pat = re.compile(r'^\w[^\n]{1,40}\s{3,}.+')
+        lines = text.split('\n')
+        cleaned = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                cleaned.append('')
+                continue
+
+            prev = cleaned[-1] if cleaned else ''
+            prev_stripped = prev.strip()
+
+            # Guard: do NOT merge if either line looks like a table row
+            is_table_line = (
+                '   ' in stripped or          # 3+ leading spaces
+                line.startswith('   ') or      # leading indent
+                (prev_stripped and '   ' in prev_stripped) or  # prev has column gap
+                _table_pat.match(stripped) or
+                (prev_stripped and _table_pat.match(prev_stripped))
+            )
+
+            if (not is_table_line and
+                    prev_stripped and stripped and
+                    (stripped[0].islower() or
+                     stripped.startswith('(') or
+                     re.match(r'^(with|or|and|for|by|of|in|at|to)\s', stripped, re.IGNORECASE))):
+                cleaned[-1] = cleaned[-1].rstrip() + ' ' + stripped
+            else:
+                cleaned.append(line)
+
+        return '\n'.join(cleaned)

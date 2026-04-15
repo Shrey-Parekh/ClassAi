@@ -4,6 +4,7 @@ LLM-based answer generation with structured JSON output.
 
 from typing import List, Dict, Any
 import json
+import os
 import re
 import logging
 from pydantic import ValidationError
@@ -13,10 +14,24 @@ from .response_schema import StructuredResponse
 from config.chunking_config import INTENT_CHUNK_LIMITS, DEFAULT_CHUNK_LIMIT
 
 
+def _context_budget_for_provider() -> Dict[str, int]:
+    """
+    Pick context/output token budget based on the active LLM provider.
+    Ollama's gemma3:12b runs with num_ctx=8192 in llm.py, so Gemini's 32K
+    budget would silently truncate prompts. Return (context, output) pairs
+    sized for the backend actually in use.
+    """
+    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    if provider == "gemini":
+        return {"context": 32768, "output": 2048, "prompt": 500}
+    # Ollama / default: match num_ctx=8192 in utils/llm.py
+    return {"context": 7168, "output": 1024, "prompt": 500}
+
+
 # Schema normalization mappings
-# Accept Gemma's creative names and map them to valid schema types
+# Accept LLM's creative names and map them to valid schema types
 TYPE_ALIASES = {
-    # Gemma's invented names → valid types
+    # LLM's invented names → valid types
     "list": "bullets",
     "unordered": "bullets",
     "ordered": "steps",
@@ -26,11 +41,16 @@ TYPE_ALIASES = {
     "info": "alert",
     "warning": "alert",
     "note": "alert",
-    "callout": "alert"
+    "callout": "alert",
+    "bullet_points": "bullets",
+    "bullet": "bullets",
+    "numbered_list": "steps",
+    "step_by_step": "steps",
+    "body": "paragraph"
 }
 
 SECTION_FIELD_FIXES = {
-    # If Gemma uses wrong field names → fix them
+    # If LLM uses wrong field names → fix them
     "content": "items",  # for bullet/steps sections
     "points": "items",
     "list": "items",
@@ -52,20 +72,22 @@ class AnswerGenerator:
     - Dynamic token-based chunk limiting for optimal context usage
     """
     
-    # Context window allocation (8K total for faster processing)
-    MAX_CONTEXT_TOKENS = 8192
-    SYSTEM_PROMPT_TOKENS = 500  # Prompt template overhead
-    OUTPUT_TOKENS = 1024  # Reserve for LLM response (reduced for speed)
-    AVAILABLE_FOR_CHUNKS = MAX_CONTEXT_TOKENS - SYSTEM_PROMPT_TOKENS - OUTPUT_TOKENS  # ~6.6K
+    # Context window allocation — branches on LLM_PROVIDER env var so the
+    # same code works for both Ollama (8K ctx) and Gemini (32K+ ctx).
+    _BUDGET = _context_budget_for_provider()
+    MAX_CONTEXT_TOKENS = _BUDGET["context"]
+    SYSTEM_PROMPT_TOKENS = _BUDGET["prompt"]
+    OUTPUT_TOKENS = _BUDGET["output"]
+    AVAILABLE_FOR_CHUNKS = MAX_CONTEXT_TOKENS - SYSTEM_PROMPT_TOKENS - OUTPUT_TOKENS
     
     def __init__(self, llm_client):
-        """Initialize with LLM client (Ollama)."""
+        """Initialize with LLM client (Gemini 2.0 Flash)."""
         self.llm = llm_client
         self.logger = logging.getLogger(__name__)
     
     def _estimate_tokens(self, text: str) -> int:
-        """Estimate token count (1 token ≈ 4 chars for English)."""
-        return len(text) // 4
+        """Estimate token count (word count * 1.3 for subword inflation)."""
+        return int(len(text.split()) * 1.3) if text else 0
     
     def _select_chunks_by_tokens(
         self,
@@ -100,7 +122,7 @@ class AnswerGenerator:
                 break
             
             # Estimate tokens for this chunk
-            chunk_text = chunk.get("content", "")
+            chunk_text = chunk.get("text", "")
             chunk_tokens = self._estimate_tokens(chunk_text)
             
             # Check if adding this chunk would exceed budget
@@ -145,18 +167,18 @@ class AnswerGenerator:
         # Select chunks dynamically based on token budget and relevance
         chunks_to_use = self._select_chunks_by_tokens(retrieved_chunks, intent_type)
         
-        print(f"=== CHUNK RETRIEVAL DIAGNOSTIC ===")
-        print(f"Intent: {intent_type}")
-        print(f"Chunks available: {len(retrieved_chunks)}")
-        print(f"Chunks selected: {len(chunks_to_use)}")
+        self.logger.debug(f"=== CHUNK RETRIEVAL DIAGNOSTIC ===")
+        self.logger.debug(f"Intent: {intent_type}")
+        self.logger.debug(f"Chunks available: {len(retrieved_chunks)}")
+        self.logger.debug(f"Chunks selected: {len(chunks_to_use)}")
         if chunks_to_use:
-            print(f"Score range: {chunks_to_use[0].get('score', 0):.3f} - {chunks_to_use[-1].get('score', 0):.3f}")
+            self.logger.debug(f"Score range: {chunks_to_use[0].get('score', 0):.3f} - {chunks_to_use[-1].get('score', 0):.3f}")
             for i, chunk in enumerate(chunks_to_use[:3], 1):
-                print(f"\nCHUNK {i}:")
-                print(f"  Available keys: {list(chunk.keys())}")
-                print(f"  Score: {chunk.get('score', 'N/A')}")
-                print(f"  Source: {chunk.get('metadata', {}).get('document_name', 'unknown')}")
-                print(f"  Section: {chunk.get('metadata', {}).get('section_title', 'N/A')}")
+                self.logger.debug(f"\nCHUNK {i}:")
+                self.logger.debug(f"  Available keys: {list(chunk.keys())}")
+                self.logger.debug(f"  Score: {chunk.get('score', 'N/A')}")
+                self.logger.debug(f"  Source: {chunk.get('metadata', {}).get('document_name', 'unknown')}")
+                self.logger.debug(f"  Section: {chunk.get('metadata', {}).get('section_title', 'N/A')}")
                 
                 # Try multiple possible content keys
                 content = (
@@ -167,84 +189,73 @@ class AnswerGenerator:
                     chunk.get("payload", {}).get("content") or
                     "*** EMPTY - KEY MISMATCH ***"
                 )
-                print(f"  Content preview: {str(content)[:200]}")
+                self.logger.debug(f"  Content preview: {str(content)[:200]}")
         else:
-            print("WARNING: No chunks selected!")
-        print("=== END CHUNK DIAGNOSTIC ===")
+            self.logger.debug("WARNING: No chunks selected!")
+        self.logger.debug("=== END CHUNK DIAGNOSTIC ===")
         
         # Build context from selected chunks
         context = self._build_context(chunks_to_use)
         
-        print(f"=== CONTEXT DIAGNOSTIC ===")
-        print(f"Context length: {len(context)} chars")
-        print(f"Context preview (first 500 chars):\n{context[:500]}")
-        print("=== END CONTEXT ===")
+        self.logger.debug(f"=== CONTEXT DIAGNOSTIC ===")
+        self.logger.debug(f"Context length: {len(context)} chars")
+        self.logger.debug(f"Context preview (first 500 chars):\n{context[:500]}")
+        self.logger.debug("=== END CONTEXT ===")
         
         # Get JSON prompt for intent
         prompt = get_prompt(intent_type, context, query)
         
-        print(f"=== PROMPT DIAGNOSTIC ===")
-        print(f"Prompt length: {len(prompt)} chars")
-        print(f"Prompt preview (first 800 chars):\n{prompt[:800]}")
-        print("=== END PROMPT ===")
+        self.logger.debug(f"=== PROMPT DIAGNOSTIC ===")
+        self.logger.debug(f"Prompt length: {len(prompt)} chars")
+        self.logger.debug(f"Prompt preview (first 800 chars):\n{prompt[:800]}")
+        self.logger.debug("=== END PROMPT ===")
         
-        # DEBUG: Count tokens being sent to Gemma
+        # DEBUG: Count tokens being sent to Gemini
         prompt_chars = len(prompt)
-        estimated_input_tokens = prompt_chars // 4
+        estimated_input_tokens = self._estimate_tokens(prompt)
         context_chars = len(context)
-        estimated_context_tokens = context_chars // 4
+        estimated_context_tokens = self._estimate_tokens(context)
         
-        print("=== TOKEN USAGE ESTIMATE ===")
-        print(f"Prompt total characters: {prompt_chars}")
-        print(f"Estimated INPUT tokens: {estimated_input_tokens}")
-        print(f"Context characters: {context_chars}")
-        print(f"Estimated CONTEXT tokens: {estimated_context_tokens}")
-        print(f"Number of chunks: {len(chunks_to_use)}")
-        print(f"Gemma3:12b context window: 32768 tokens (32K)")
-        print(f"Usage: {(estimated_input_tokens/32768)*100:.1f}% of context window")
-        print("=== END TOKEN ESTIMATE ===")
+        self.logger.debug("=== TOKEN USAGE ESTIMATE ===")
+        self.logger.debug(f"Prompt total characters: {prompt_chars}")
+        self.logger.debug(f"Estimated INPUT tokens: {estimated_input_tokens}")
+        self.logger.debug(f"Context characters: {context_chars}")
+        self.logger.debug(f"Estimated CONTEXT tokens: {estimated_context_tokens}")
+        self.logger.debug(f"Number of chunks: {len(chunks_to_use)}")
+        self.logger.debug(f"Gemini 2.0 Flash context window: 1M tokens (using {self.MAX_CONTEXT_TOKENS} for this request)")
+        self.logger.debug(f"Usage: {(estimated_input_tokens/self.MAX_CONTEXT_TOKENS)*100:.1f}% of allocated context")
+        self.logger.debug("=== END TOKEN ESTIMATE ===")
 
-        # Generate with optimized settings for speed
-        # Reduced context window (8K) and max_tokens (512) for 2-3x faster generation
-        # format="json" forces Ollama to output valid JSON
+        # Generate with Gemini 2.0 Flash
+        # TODO: Update format parameter for Gemini client wrapper (may need response_mime_type="application/json")
         raw_response = self.llm.generate(
             prompt,
             temperature=0.2,
-            max_tokens=512,  # Reduced from 1024 for even faster generation
-            format="json"
+            max_tokens=2048,  # Increased for complex JSON responses with citations
+            format="json"  # TODO: Verify this parameter works with Gemini client wrapper
         )
         
-        # DIAGNOSTIC: Log what Ollama actually returns
-        print(f"=== RAW OLLAMA RESPONSE ===")
-        print(f"Length: {len(raw_response)} chars")
-        print(f"First 500 chars: {raw_response[:500]}")
-        print(f"Last 100 chars: {raw_response[-100:]}")
-        print("=== END RAW RESPONSE ===")
+        # DIAGNOSTIC: Log what Gemini actually returns
+        self.logger.debug(f"=== RAW LLM RESPONSE ===")
+        self.logger.debug(f"Length: {len(raw_response)} chars")
+        self.logger.debug(f"First 500 chars: {raw_response[:500]}")
+        self.logger.debug(f"Last 100 chars: {raw_response[-100:]}")
+        self.logger.debug("=== END RAW RESPONSE ===")
 
         # Parse and validate JSON
         structured = self._parse_json_response(raw_response, intent_type, query)
         
-        # Auto-generate footer from cited sources if not provided by LLM
+        # Auto-generate footer from source documents if not provided by LLM
         if not structured.footer:
-            sources_used = set()
-            for section in structured.sections:
-                # Extract citation numbers from content and items
-                content_text = section.content or ""
-                items_text = " ".join(section.items or [])
-                all_text = content_text + " " + items_text
-                
-                citations = re.findall(r'\[(\d+)\]', all_text)
-                for citation in citations:
-                    idx = int(citation) - 1
-                    if 0 <= idx < len(chunks_to_use):
-                        doc_name = chunks_to_use[idx].get("metadata", {}).get("document_name", "")
-                        if doc_name:
-                            # Clean up document name
-                            clean_name = doc_name.replace(".pdf", "").replace("_", " ")
-                            sources_used.add(clean_name)
+            source_docs = set()
+            for chunk in chunks_to_use:
+                doc_name = chunk.get("metadata", {}).get("document_name", "")
+                if doc_name:
+                    clean_name = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
+                    source_docs.add(clean_name)
             
-            if sources_used:
-                structured.footer = "Sources: " + ", ".join(sorted(sources_used))
+            if source_docs:
+                structured.footer = "Based on: " + ", ".join(sorted(source_docs))
 
         # Extract sources
         sources = self._extract_sources(chunks_to_use)
@@ -255,8 +266,15 @@ class AnswerGenerator:
         # Log context usage
         self._log_context_usage(query, chunks_to_use, estimated_context_tokens)
         
+        # Use model_dump() for Pydantic v2 compatibility
+        try:
+            structured_dict = structured.model_dump()
+        except AttributeError:
+            # Fallback for Pydantic v1
+            structured_dict = structured.dict()
+        
         return {
-            "structured": structured.dict(),
+            "structured": structured_dict,
             "sources": sources,
             "chunks_used": len(chunks_to_use),
             "intent": intent_type,
@@ -328,7 +346,7 @@ class AnswerGenerator:
     
     def _normalize_schema(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Normalize Gemma's creative JSON to match our schema.
+        Normalize LLM's creative JSON to match our schema.
         
         Fixes:
         - Type aliases (list → bullets, text → paragraph)
@@ -336,7 +354,7 @@ class AnswerGenerator:
         - Missing required fields (adds defaults)
         
         Args:
-            data: Raw parsed JSON from Gemma
+            data: Raw parsed JSON from LLM
         
         Returns:
             Normalized JSON matching StructuredResponse schema
@@ -393,13 +411,13 @@ class AnswerGenerator:
     
     def _build_context(self, chunks: List[Dict[str, Any]]) -> str:
         """
-        Build numbered context string from retrieved chunks for citation tracking.
+        Build context string from retrieved chunks.
         
-        Each chunk is numbered [1], [2], etc. for citation in the response.
+        Each chunk includes source information for reference.
         """
         context_parts = []
         
-        for i, chunk in enumerate(chunks, 1):
+        for chunk in chunks:
             # Text is at top level, not in metadata
             content = chunk.get("text", "")
             doc_name = chunk.get("metadata", {}).get("document_name", "Unknown Document")
@@ -410,9 +428,9 @@ class AnswerGenerator:
             if section:
                 source_header += f" — {section}"
             
-            # Number chunk for citation
-            numbered = f"[{i}] {source_header}\n{content}"
-            context_parts.append(numbered)
+            # Format without numbering
+            formatted = f"{source_header}\n{content}"
+            context_parts.append(formatted)
         
         return "\n\n---\n\n".join(context_parts)
     
@@ -504,18 +522,17 @@ class AnswerGenerator:
             
             # Append to log file
             log_file = log_dir / "context_usage.jsonl"
-            
+
             log_entry = {
                 "timestamp": datetime.utcnow().isoformat(),
-                "query": query[:100],  # Truncate for privacy
+                "query": query,
                 "chunks_used": len(chunks),
                 "tokens_used": tokens_used,
-                "tokens_available": self.AVAILABLE_FOR_CHUNKS,
-                "utilization": tokens_used / self.AVAILABLE_FOR_CHUNKS
+                "max_context_tokens": self.MAX_CONTEXT_TOKENS,
+                "available_for_chunks": self.AVAILABLE_FOR_CHUNKS,
             }
-            
-            with open(log_file, 'a') as f:
-                f.write(json.dumps(log_entry) + '\n')
-        
+
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
-            self.logger.debug(f"Failed to log context usage: {e}")
+            self.logger.warning(f"Failed to log context usage: {e}")

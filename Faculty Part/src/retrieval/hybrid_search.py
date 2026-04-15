@@ -5,9 +5,10 @@ Hybrid search combining dense vectors and BM25 sparse retrieval.
 from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass
 import logging
+import re
+import threading
 from rank_bm25 import BM25Okapi
 
-from ..utils.sparse_encoder import SparseEncoder
 from ..utils.bm25_persistence import BM25PersistenceManager
 
 
@@ -31,10 +32,17 @@ class HybridSearchEngine:
     3. Fusion of results with intent-based dynamic weighting
     """
     
-    # Intent-based weight mapping
+    # Intent-based weight mapping.
+    # person_lookup  → names/departments: sparse-heavy for exact string hits
+    # policy_lookup  → policy/form-code queries: balanced semantic+keyword
+    # topic_search   → thematic discovery: dense-heavy
+    # procedure      → steps/how-to: balanced
+    # eligibility    → rule queries: balanced
+    # general        → fallback: dense-leaning
     INTENT_WEIGHTS = {
         "person_lookup": {"dense": 0.40, "sparse": 0.60},
-        "lookup": {"dense": 0.40, "sparse": 0.60},
+        "policy_lookup": {"dense": 0.60, "sparse": 0.40},
+        "lookup": {"dense": 0.40, "sparse": 0.60},  # legacy alias → person-biased
         "topic_search": {"dense": 0.80, "sparse": 0.20},
         "procedure": {"dense": 0.60, "sparse": 0.40},
         "eligibility": {"dense": 0.60, "sparse": 0.40},
@@ -66,12 +74,33 @@ class HybridSearchEngine:
         # BM25 persistence manager
         self.bm25_persistence = BM25PersistenceManager()
         
-        # Initialize sparse encoder (fallback)
-        try:
-            self.sparse_encoder = SparseEncoder(model_name="prithivida/Splade_PP_en_v1")
-        except Exception as e:
-            self.logger.warning(f"Failed to initialize sparse encoder: {e}")
-            self.sparse_encoder = None
+        # Thread safety for BM25 operations
+        self._bm25_lock = threading.Lock()
+    
+    def _tokenize(self, text: str) -> List[str]:
+        """
+        Tokenize text for BM25 with punctuation handling.
+        
+        Handles:
+        - Form codes like HR-LA-01
+        - Abbreviations like Dr., Rs.
+        - Parenthetical text like (EL)
+        - Table content with pipes and multiple spaces
+        
+        Args:
+            text: Text to tokenize
+        
+        Returns:
+            List of cleaned tokens
+        """
+        # Remove common punctuation that breaks matching
+        text = re.sub(r'[(){}[\]|•·,;:!?"]', ' ', text.lower())
+        # Keep hyphens in form codes (HR-LA-01) but split on standalone hyphens
+        text = re.sub(r'\s+-\s+', ' ', text)
+        # Keep periods in abbreviations (Dr., Rs.) but split on sentence periods
+        text = re.sub(r'\.(\s|$)', ' ', text)
+        # Split and filter empty tokens
+        return [token for token in text.split() if len(token) > 1]
     
     def search(
         self,
@@ -123,7 +152,7 @@ class HybridSearchEngine:
         
         # 3. Sparse search using expanded query for keywords
         sparse_results = []
-        if self.sparse_encoder:
+        if self.bm25_index is not None:
             # Use expanded query for better keyword coverage
             sparse_results = self._sparse_search(
                 expanded_query,
@@ -222,8 +251,8 @@ class HybridSearchEngine:
             for point in all_points:
                 content = point.payload.get("content", "")
                 if content:
-                    # Tokenize for BM25
-                    tokens = content.lower().split()
+                    # Tokenize for BM25 with punctuation handling
+                    tokens = self._tokenize(content)
                     self.bm25_corpus.append(tokens)
                     self.bm25_ids.append(point.id)
             
@@ -263,11 +292,12 @@ class HybridSearchEngine:
                 self.logger.debug("BM25 index not built, skipping sparse search")
                 return []
             
-            # Tokenize query
-            query_tokens = query.lower().split()
+            # Tokenize query with punctuation handling
+            query_tokens = self._tokenize(query)
             
-            # Get BM25 scores
-            scores = self.bm25_index.get_scores(query_tokens)
+            # Get BM25 scores with thread safety
+            with self._bm25_lock:
+                scores = self.bm25_index.get_scores(query_tokens)
             
             # Get top-k indices
             top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_k]
@@ -433,5 +463,5 @@ class HybridSearchEngine:
                 conditions.append(
                     FieldCondition(key=key, match=MatchValue(value=value))
                 )
-        
+
         return Filter(must=conditions) if conditions else None

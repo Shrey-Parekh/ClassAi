@@ -140,13 +140,11 @@ class BM25PersistenceManager:
             return False
     
     def _calculate_checksum(self, corpus: List[List[str]], ids: List[str]) -> str:
-        """Calculate checksum for corpus and IDs."""
-        # Create deterministic representation
-        data = {
-            "corpus_size": len(corpus),
-            "ids_size": len(ids),
-            "sample_ids": ids[:10] if len(ids) > 10 else ids
-        }
-        
-        content = json.dumps(data, sort_keys=True)
-        return hashlib.sha256(content.encode()).hexdigest()
+        """Calculate checksum for corpus and IDs — hashes every id and first 64 tokens."""
+        h = hashlib.sha256()
+        for cid, tokens in zip(ids, corpus):
+            h.update(cid.encode())
+            h.update(b"\0")
+            h.update((" ".join(tokens[:64])).encode())
+            h.update(b"\n")
+        return h.hexdigest()

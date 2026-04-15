@@ -109,8 +109,8 @@ class BGEReranker:
         diverse_results = []
         
         for result in results:
-            # Get doc_id from metadata
-            doc_id = result.metadata.get("doc_id", result.metadata.get("parent_doc_id", "unknown"))
+            # Get doc_id from metadata (prioritize document_name which is always set)
+            doc_id = result.metadata.get("document_name", result.metadata.get("doc_id", result.metadata.get("parent_doc_id", "unknown")))
             
             # Check if we've hit the cap for this document
             current_count = doc_counts.get(doc_id, 0)

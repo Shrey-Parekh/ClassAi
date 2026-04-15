@@ -1,0 +1,47 @@
+{
+  "session_id": "632255ac-2e44-46b9-b69d-40f8f376a990",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the leave rules for teaching staff?",
+      "timestamp": "2026-03-27T18:14:22.946703",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"leave_rules\", \"title\": \"Leave Rules for Teaching Staff\", \"subtitle\": null, \"sections\": [{\"heading\": \"General Leave Entitlement\", \"type\": \"paragraph\", \"content\": \"Faculty members are entitled to leave as prescribed in the Employee Resource Book (ERB) [2]. The ERB is incorporated by reference into the Faculty Employment Agreement [2].\"}, {\"heading\": \"Types of Leave Available\", \"type\": \"bullets\", \"items\": [\"Annual Leave: Entitlement as approved [5]\", \"Academic Leave (Conference/FDP): As approved [5]\", \"Sabbatical Leave: 6-12 months (after 7 years) [5]\", \"Leave Without Pay (LWP): As sanctioned, granted only in exceptional circumstances and impacts gratuity/provident fund calculations proportionately [4]. Continuous LWP exceeding 30 days without prior sanction may result in termination of service [4]. Medical emergencies can potentially be converted to Medical Leave if unused balance is available with doctor's certification [4]\", \"Special Leave (Marriage/Bereavement): 3-5 days [5]\", \"Maternity Leave: 26 weeks [5]\", \"Paternity Leave: 15 days [5]\"]}, {\"heading\": \"Attendance Requirements\", \"type\": \"paragraph\", \"content\": \"All faculty must mark attendance through the biometric system [3]. Minimum attendance is 90% per semester [3]. Arrival after 9:30 AM is marked as half-day absent unless prior approval is obtained [3]. Leaving before 4:30 PM without approval is also marked as a half-day absent [3].\"}, {\"heading\": \"Class Cancellation\", \"type\": \"paragraph\", \"content\": \"Classes must not be cancelled without the prior written approval of the Department Head [1]. In case of unavoidable cancellation, a makeup class must be arranged within the same week [1].\"}], \"footer\": \"Sources: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium, NMIMS Faculty Employment Agreement Legal\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-27T18:14:22.947703",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-03-27T18:14:22.946703",
+  "updated_at": "2026-03-27T18:14:22.947703"
+}

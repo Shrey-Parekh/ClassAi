@@ -229,6 +229,8 @@ class DualEncoderEmbeddings:
                     texts, chunk_ids, source_files, chunk_lengths
                 )
             ]
+    
+    def get_stats(self) -> Dict[str, int]:
         """Get embedding statistics."""
         return self.stats.copy()
     

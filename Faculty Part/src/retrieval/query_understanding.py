@@ -2,7 +2,7 @@
 Enhanced query understanding with intent, domain, and entity detection.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import re
 
@@ -202,8 +202,10 @@ class QueryAnalyzer:
             # Research topics
             "topic": r"\b(AI|ML|machine\s+learning|deep\s+learning|neural\s+networks?|blockchain|IoT|internet\s+of\s+things|renewable\s+energy|solar|wind|thermal|finance|economics|marketing|supply\s+chain|operations?|robotics|automation|nanotechnology|biotechnology)\b",
             
-            # Form names
-            "form": r"\b(form|application)\s+[A-Z]{1,3}-?\d{1,3}\b",
+            # Form / policy codes — e.g. "HR-LA-01", "Form CL-7", "FAC-04", "ERB 2024-25"
+            # Matches optional "form"/"application" prefix, then a dash-separated
+            # code with 1-4 letter segments and a trailing number.
+            "form": r"\b(?:form|application)?\s*[A-Z]{1,4}(?:-[A-Z]{1,4}){0,2}-?\d{1,3}\b",
             
             # Document types
             "document": r"\b(policy|guideline|handbook|manual|compendium|agreement|contract)\b"
@@ -233,15 +235,20 @@ class QueryAnalyzer:
         Returns:
             QueryUnderstanding with extracted information
         """
-        # Preprocess query (clean, normalize)
+        # Detect intent on ORIGINAL query BEFORE preprocessing (preserves signal words)
+        intent = self._detect_intent(query.lower())
+        
+        # THEN preprocess query (clean, normalize)
         query_preprocessed = self._preprocess_query(query)
         
         # Normalize query (handle variations)
         query_normalized = self._normalize_query(query_preprocessed)
         query_lower = query_normalized.lower()
         
-        # Detect intent with scoring
-        intent = self._detect_intent(query_lower)
+        # Check for document-scoped broad queries first
+        doc_scope_result = self._detect_document_scope_query(query_lower)
+        if doc_scope_result:
+            return doc_scope_result
         
         # Detect domain with weighted scoring
         domain = self._detect_domain(query_lower)
@@ -268,6 +275,50 @@ class QueryAnalyzer:
             metadata_filters=metadata_filters,
             expanded_query=expanded_query
         )
+    
+    def _detect_document_scope_query(self, query: str) -> Optional[QueryUnderstanding]:
+        """
+        Detect broad queries asking about entire documents.
+        
+        These queries need special handling:
+        - Force metadata filter to specific document
+        - Increase top_k to get more chunks
+        - Change intent to document_overview
+        
+        Returns QueryUnderstanding if matched, None otherwise.
+        """
+        # Document-scoped broad query patterns
+        document_patterns = [
+            (r'(employee resource book|ERB)\s*(rules|policies|guidelines|content|information)', 
+             'NMIMS_Employee_Resource_Book_2024-25.pdf'),
+            (r'(faculty academic guidelines|FAG)\s*(rules|policies|content|information)', 
+             'NMIMS_Faculty_Academic_Guidelines.pdf'),
+            (r'(faculty applications compendium)\s*(rules|policies|content|information|forms)', 
+             'NMIMS_Faculty_Applications_Compendium.pdf'),
+            (r'tell me (about|the)\s*(resource book|employee book|ERB)', 
+             'NMIMS_Employee_Resource_Book_2024-25.pdf'),
+            (r'tell me (about|the)\s*(academic guidelines|FAG)', 
+             'NMIMS_Faculty_Academic_Guidelines.pdf'),
+            (r'tell me (about|the)\s*(applications compendium|forms compendium)', 
+             'NMIMS_Faculty_Applications_Compendium.pdf'),
+            (r'what (is|are) (in|the)\s*(resource book|employee book|ERB)', 
+             'NMIMS_Employee_Resource_Book_2024-25.pdf'),
+            (r'what (is|are) (in|the)\s*(academic guidelines|FAG)', 
+             'NMIMS_Faculty_Academic_Guidelines.pdf'),
+        ]
+        
+        for pattern, doc_name in document_patterns:
+            if re.search(pattern, query, re.IGNORECASE):
+                return QueryUnderstanding(
+                    intent="document_overview",
+                    domain="policies",
+                    entities=[],
+                    is_current_only=False,
+                    metadata_filters={"document_name": doc_name},
+                    expanded_query=query + " policy guidelines rules procedures sections"
+                )
+        
+        return None
     
     def _preprocess_query(self, query: str) -> str:
         """
@@ -576,8 +627,40 @@ class QueryAnalyzer:
         
         # Return intent with highest score, or general if no matches
         if max(intent_scores.values()) > 0:
-            return max(intent_scores, key=intent_scores.get)
-        
+            top = max(intent_scores, key=intent_scores.get)
+
+            # Refine generic "lookup" into person_lookup vs policy_lookup so
+            # hybrid-search weights can differ for these two very different
+            # query shapes.
+            if top == "lookup":
+                person_signals = [
+                    r"\b(dr|prof|professor|mr|ms|mrs|miss)\.?\b",
+                    r"\bfaculty\b", r"\bteacher\b", r"\blecturer\b",
+                    r"\bwho\s+(is|are|teaches|researches|wrote|published)\b",
+                    r"\bpublications?\s+(of|by)\b",
+                    r"\bprofile\s+of\b", r"\bexpertise\s+of\b",
+                ]
+                policy_signals = [
+                    r"\bpolicy\b", r"\bclause\b", r"\bsection\b",
+                    r"\bform\b", r"\bapplication\b",
+                    r"\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b",
+                    r"\bleave\b", r"\bsabbatical\b", r"\bgratuity\b",
+                    r"\bprovident\s+fund\b", r"\bmedical\s+reimbursement\b",
+                    r"\bagreement\b", r"\bcontract\b",
+                    r"\bguideline(s)?\b", r"\beligibility\b",
+                ]
+                person_hits = sum(
+                    1 for p in person_signals if re.search(p, query, re.IGNORECASE)
+                )
+                policy_hits = sum(
+                    1 for p in policy_signals if re.search(p, query, re.IGNORECASE)
+                )
+                if policy_hits > person_hits:
+                    return "policy_lookup"
+                return "person_lookup"
+
+            return top
+
         return "general"
     
     def _detect_domain(self, query: str) -> str:
@@ -641,32 +724,21 @@ class QueryAnalyzer:
     def _is_current_only(self, query: str) -> bool:
         """
         Determine if query should filter for current documents only.
-        
-        Looks for temporal indicators and version-specific terms.
+
+        Looks for temporal cues suggesting the user wants current/latest info.
         """
-        current_keywords = [
-            r"\bcurrent\b",
-            r"\blatest\b",
-            r"\brecent\b",
-            r"\bnew\b",
-            r"\bupdated\b",
-            r"\bactive\b",
-            r"\bvalid\b",
-            r"\b202[4-9]\b",  # Years 2024+
-            r"\b203[0-9]\b",  # Years 2030+
-            r"\bthis\s+year\b",
-            r"\bthis\s+semester\b",
-            r"\btoday\b",
-            r"\bnow\b",
-            r"\bpresent\b"
+        current_indicators = [
+            r"\bcurrent\b", r"\blatest\b", r"\bnow\b", r"\btoday\b",
+            r"\bthis\s+(year|semester|term)\b", r"\brecent\b", r"\bnew\b",
+            r"\bactive\b", r"\bongoing\b", r"\bpresent\b",
+            r"\bwhat.?s\s+the\s+current\b",
         ]
-        
-        for keyword in current_keywords:
-            if re.search(keyword, query, re.IGNORECASE):
+        for pattern in current_indicators:
+            if re.search(pattern, query, re.IGNORECASE):
                 return True
-        
+
         return False
-    
+
     def _build_metadata_filters(
         self,
         domain: str,
@@ -675,28 +747,29 @@ class QueryAnalyzer:
     ) -> Dict[str, Any]:
         """
         Build metadata filters based on query understanding.
-        
+
         Filters are applied during vector search to narrow results.
-        
+
         Args:
             domain: Detected domain (faculty_info, policies, procedures)
             is_current_only: Whether to filter for current documents
             entities: Extracted entities (names, departments, etc.)
-        
+
         Returns:
             Dict of metadata filters for Qdrant
         """
         filters = {}
-        
-        # Domain filtering
-        if domain and domain != "general":
-            filters["domain"] = domain
-        
-        # Current documents only
-        if is_current_only:
-            filters["is_current"] = True
-        
+
+        # NOTE: `domain` and `is_current` are NOT currently written to chunk
+        # metadata during ingestion (see src/chunking/document_chunker.py).
+        # Emitting these as Qdrant filters caused every search to return zero
+        # hits. They are intentionally omitted until ingestion populates them.
+        # The detected values remain on the QueryUnderstanding object for
+        # downstream weighting/observability.
+        _ = domain
+        _ = is_current_only
+
         # Entity-based filtering (e.g., department, document type)
         # This can be expanded based on your metadata schema
-        
+
         return filters

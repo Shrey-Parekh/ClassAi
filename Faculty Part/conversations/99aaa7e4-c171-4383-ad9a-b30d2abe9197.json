@@ -1,0 +1,41 @@
+{
+  "session_id": "99aaa7e4-c171-4383-ad9a-b30d2abe9197",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What are the leave rules for teaching staff?",
+      "timestamp": "2026-04-15T21:29:04.692781",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"leave_policies\", \"title\": \"Leave Policies for Faculty\", \"subtitle\": null, \"sections\": [{\"heading\": \"General Leave Framework\", \"type\": \"paragraph\", \"content\": \"NMIMS provides a comprehensive leave framework designed to support faculty wellbeing while ensuring academic continuity. All leaves are governed by the provisions in the Employee Resource Book (ERB) and must be applied for through the NMIMS HR Management System (HRMS) at hrms.nmims.edu.\"}, {\"heading\": \"Academic Leave\", \"type\": \"bullets\", \"items\": [\"Conference Attendance: Up to 5 days per year, requires paper presentation and conference recognition, prior approval required.\", \"Research Visit / Fellowship: Up to 1 year for full-time Ph.D. or post-doctoral studies, subject to Board approval.\", \"Faculty Development Programme (FDP): Mandatory institutional FDPs are on duty; others require approval.\", \"Study Leave (Long - term): Up to 2 years for pursuing Ph.D., without pay (may be with reduced pay after 3 years service), requires a bond of 3 years service post-return.\", \"Sabbatical Leave: 6 months to 1 year for research/writing, available after 7 years of continuous service, 50% pay, once in 7 years.\"]}, {\"heading\": \"Leave Without Pay (LWP)\", \"type\": \"paragraph\", \"content\": \"When a faculty member exhausts all paid leave entitlements, additional absence may be sanctioned as Leave Without Pay at the discretion of the institution. LWP is not a right and is granted only in exceptional circumstances. It impacts gratuity and provident fund calculations proportionately. Continuous LWP exceeding 30 days without prior sanction may result in termination of service. LWP for medical emergencies may be converted to Medical Leave if unused balance is available upon doctor's certification.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines, NMIMS Faculty Employment Agreement Legal\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T21:29:04.692781",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "lookup"
+      }
+    }
+  ],
+  "created_at": "2026-04-15T21:29:04.692781",
+  "updated_at": "2026-04-15T21:29:04.692781"
+}

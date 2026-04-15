@@ -1,0 +1,47 @@
+{
+  "session_id": "ff986285-0c14-4235-be4f-5f691fe7dbc8",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What types of leave are available?",
+      "timestamp": "2026-03-27T19:21:11.994916",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Policy\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"Available leave types include Annual, Academic Leave (Conference/FDP), Sabbatical Leave, Maternity Leave, Paternity Leave, Special Leave (Marriage/Bereavement), Election Duty Leave, Court Summons Leave, Blood Donation Leave, Medical/Sick Leave, and Leave Without Pay [1, 2].\"}], \"footer\": null, \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-03-27T19:21:11.994916",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employment_agreement_2024",
+            "title": "NMIMS Faculty Employment Agreement",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-03-27T19:21:11.994916",
+  "updated_at": "2026-03-27T19:21:11.994916"
+}

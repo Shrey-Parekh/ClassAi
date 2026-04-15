@@ -1,72 +1,90 @@
 """
-Reset the vector database - delete all chunks and start fresh.
+Reset the vector database and BM25 index - delete all chunks and start fresh.
 """
 
 import sys
+import os
 from pathlib import Path
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.utils.vector_db import VectorDBClient  # noqa: E402
+from qdrant_client import QdrantClient  # noqa: E402
 from dotenv import load_dotenv  # noqa: E402
-import requests  # noqa: E402
 
 load_dotenv()
 
 
 def main():
-    """Reset Qdrant collection by deleting all chunks."""
-    print("Resetting vector database...\n")
+    """Reset Qdrant collection and BM25 index."""
+    print("=" * 70)
+    print("RESET VECTOR DATABASE")
+    print("=" * 70)
+    print()
 
+    collection_name = "faculty_chunks"
+    qdrant_url = os.getenv("QDRANT_URL", "http://localhost:6333")
+    
     try:
         # Connect to Qdrant
-        vector_db = VectorDBClient()
-
-        collection_name = "faculty_chunks"
-
-        # Try to delete collection via REST API directly (bypass pydantic validation)
+        client = QdrantClient(url=qdrant_url)
+        print(f"✓ Connected to Qdrant at {qdrant_url}")
+        
+        # Check if collection exists
         try:
-            url = "http://localhost:6333/collections/faculty_chunks"
-            response = requests.delete(url, timeout=5)
-
-            if response.status_code in [200, 204]:
-                print(f"✓ Collection '{collection_name}' deleted successfully!")
-                print("\nYou can now run ingestion to start fresh:")
-                print("python scripts/ingest_documents.py --input data/raw "
-                      "--metadata data/metadata.json")
-            elif response.status_code == 404:
+            info = client.get_collection(collection_name)
+            print(f"✓ Found collection '{collection_name}' with {info.points_count} chunks")
+            print()
+            
+            # Confirm deletion
+            user_response = input(f"Delete collection '{collection_name}' and all data? (yes/no): ")
+            
+            if user_response.lower() != 'yes':
+                print("\nCancelled. No changes made.")
+                return
+            
+            # Delete collection
+            client.delete_collection(collection_name)
+            print(f"\n✓ Collection '{collection_name}' deleted successfully!")
+            
+        except Exception as e:
+            if "not found" in str(e).lower():
                 print(f"Collection '{collection_name}' does not exist.")
                 print("Nothing to delete.")
             else:
-                print(f"Unexpected response: {response.status_code}")
-                print(response.text)
-
-        except requests.RequestException as e:
-            print(f"Could not delete via REST API: {e}")
-            print("Trying via client...")
-
+                raise
+        
+        # Clean up BM25 index files
+        bm25_dir = Path(__file__).parent.parent / "bm25_index"
+        if bm25_dir.exists():
+            print("\n✓ Cleaning BM25 index directory...")
+            for file in bm25_dir.glob("*"):
+                if file.is_file():
+                    file.unlink()
+                    print(f"  Deleted: {file.name}")
+        
+        # Clean up cache
+        cache_file = Path(__file__).parent.parent / "cache" / "cache.db"
+        if cache_file.exists():
+            print("\n✓ Cleaning cache...")
             try:
-                _ = vector_db.get_collection_info(collection_name)
-                print(f"Found collection: {collection_name}")
-
-                # Confirm deletion
-                user_response = input(
-                    f"Delete collection '{collection_name}' and all data? (yes/no): "
-                )
-
-                if user_response.lower() == 'yes':
-                    vector_db.delete_collection(collection_name)
-                    print(f"\n✓ Collection '{collection_name}' deleted successfully!")
-                else:
-                    print("\nCancelled. No changes made.")
-
-            except Exception as e2:
-                print(f"Collection does not exist or error: {e2}")
-                print("Nothing to delete.")
+                cache_file.unlink()
+                print("  Deleted: cache.db")
+            except PermissionError:
+                print("  ⚠ Could not delete cache.db (file is in use by API server)")
+                print(f"  Stop the API server first, then manually delete: {cache_file}")
+        
+        print()
+        print("=" * 70)
+        print("RESET COMPLETE")
+        print("=" * 70)
+        print()
+        print("You can now run ingestion to start fresh:")
+        print("python scripts/ingest_new.py --input data/raw --metadata data/metadata.json")
+        print()
 
     except Exception as e:
-        print(f"✗ Error: {e}")
+        print(f"\n✗ Unexpected error: {e}")
         sys.exit(1)
 
 
