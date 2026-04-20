@@ -44,7 +44,33 @@ def main():
         default="faculty_chunks",
         help="Vector DB collection name"
     )
-    
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help=(
+            "Re-ingest every file even if the manifest content-hash matches. "
+            "Use after chunker or embedding-model changes."
+        ),
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "Chunk documents and report counts/titles, but do not embed, "
+            "store, or update the manifest. Useful for validating chunker "
+            "changes without spending compute."
+        ),
+    )
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=None,
+        help=(
+            "Path to the ingestion manifest JSON. Defaults to "
+            "data/ingest_manifest.json next to the project root."
+        ),
+    )
+
     args = parser.parse_args()
     
     if not args.input.exists():
@@ -86,18 +112,25 @@ def main():
         print("─"*70)
         pipeline = NewIngestionPipeline(
             vector_db_client=vector_db,
-            collection_name=args.collection
+            collection_name=args.collection,
+            manifest_path=args.manifest,
         )
-        
+
         # Ingest documents
         print("\n" + "─"*70)
         print("STEP 3: Processing Documents")
+        if args.dry_run:
+            print("       (DRY RUN — no embedding, no storage)")
+        if args.force:
+            print("       (FORCE — ignoring manifest cache)")
         print("─"*70)
         results = pipeline.ingest_directory(
             directory=args.input,
-            metadata_file=args.metadata
+            metadata_file=args.metadata,
+            force_reingest=args.force,
+            dry_run=args.dry_run,
         )
-        
+
         # Check for failures
         failed = [r for r in results if "error" in r]
         if failed:
@@ -107,7 +140,7 @@ def main():
             for r in failed:
                 print(f"  ✗ {Path(r['file_path']).name}")
                 print(f"     Error: {r['error'][:100]}")
-        
+
         print("\n" + "="*70)
         print("✓ INGESTION COMPLETE")
         print("="*70)
@@ -116,7 +149,7 @@ def main():
         print(f"Files succeeded:  {len(results) - len(failed)}")
         print(f"Files failed:     {len(failed)}")
         print("="*70 + "\n")
-        
+
     except Exception as e:
         print(f"\n✗ Ingestion failed: {e}")
         traceback.print_exc()

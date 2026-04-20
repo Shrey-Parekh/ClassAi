@@ -1,0 +1,35 @@
+{
+  "session_id": "70854aa1-e145-46e6-b7db-de90d76cab18",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tel me more about the teaching standards and obligations",
+      "timestamp": "2026-04-15T22:48:47.260319",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Teaching Standards & Obligations\", \"subtitle\": null, \"sections\": [{\"heading\": \"Course Preparation\", \"type\": \"table\", \"headers\": [\"Requirement\", \"Details\"], \"rows\": [[\"Lesson Plan Submission\", \"Every faculty member must submit a detailed Lesson Plan to the Department Head at least ONE WEEK before the commencement of each semester. The Lesson Plan must include: session-wise mapping of topics, proposed teaching methodology, list of textbooks and chapters, digital resources, assessment methods and dates, industry interaction/guest lecture sessions.\"], [\"Course Outline Distribution\", \"Faculty must distribute a Course Outline (Course Information Sheet) to all enrolled students in the first class. This document must contain: lesson plan summary, evaluation components and weightages, attendance policy, recommended readings, and faculty office hours.\"]]}, {\"heading\": \"Classroom Standards\", \"type\": \"table\", \"headers\": [\"Requirement\", \"Details\"], \"rows\": [[\"Punctuality\", \"Faculty must arrive at the classroom at least 5 minutes before the scheduled start time. Habitual late starts of more than 5 minutes will be noted in the APAR.\"], [\"Classroom Conduct\", \"The classroom is a professional academic environment; faculty must model expected student behavior. Personal mobile phones must be on silent mode. Use of personal social media or unrelated browsing during class is prohibited. Faculty must not demean, humiliate, or discriminate against any student. Differences of opinion must be handled with respect.\"], [\"Class Cancellation\", \"A class may be cancelled ONLY in genuine emergencies. Prior written/email approval from the Department Head is mandatory. A makeup class must be scheduled and conducted within the same week. Students must be informed via the LMS at least 2 hours in advance. More than two cancellations without approval will result in a formal warning.\"]]}, {\"heading\": \"Syllabus Coverage\", \"type\": \"paragraph\", \"content\": \"Faculty are responsible for completing 100% of the prescribed syllabus by the end of the semester. Deviations require prior approval from the Programme Director and must be compensated with equivalent academic content. A Syllabus Completion Report must be submitted to the Department Head within 3 working days of the last lecture.\"}, {\"heading\": \"Teaching Pedagogy Standards\", \"type\": \"table\", \"headers\": [\"Pedagogy Method\", \"Recommended Usage\", \"Frequency\", \"Applicable Courses\"], \"rows\": [[\"Interactive Lecture with Q&A\", \"Every session\", \"Every session\", \"All courses\"], [\"Case Study Analysis\", \"Minimum 2 per semester\", \"Minimum 2 per semester\", \"Management, Law, Business courses\"], [\"Live Project / Industry Problem\", \"Minimum 1 per course\", \"Minimum 1 per course\", \"Applied/professional courses\"], [\"Flipped Classroom / Pre-read Model\", \"At least 20% of sessions\", \"At least 20% of sessions\", \"Graduate and post-graduate\"], [\"Simulation / Role Play\", \"As applicable\", \"As applicable\", \"Management, HR, Finance courses\"], [\"Research Paper Discussion\", \"Minimum 1 per semester\", \"Minimum 1 per semester\", \"PhD / Research-oriented courses\"], [\"Guest Lecture (Industry Expert)\", \"Minimum 1 per semester\", \"Minimum 1 per semester\", \"All professional programmes\"]]}, {\"heading\": \"Use of Technology in Teaching\", \"type\": \"paragraph\", \"content\": \"Faculty must upload all course materials on the LMS (Moodle) within 24 hours of each session. AI-assisted teaching tools may be used, but all AI-generated content must be verified for accuracy before use. Students' use of AI tools in assessments must be governed by a stated policy in the course outline.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-15T22:48:47.260319",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-04-15T22:48:47.260319",
+  "updated_at": "2026-04-15T22:48:47.260319"
+}

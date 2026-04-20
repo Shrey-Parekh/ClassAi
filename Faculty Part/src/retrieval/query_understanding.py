@@ -289,22 +289,32 @@ class QueryAnalyzer:
         """
         # Document-scoped broad query patterns
         document_patterns = [
-            (r'(employee resource book|ERB)\s*(rules|policies|guidelines|content|information)', 
+            # Long-form names with intent words
+            (r'(employee resource book|ERB)\s*(rules|policies|guidelines|content|information)',
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'(faculty academic guidelines|FAG)\s*(rules|policies|content|information)', 
+            (r'(faculty academic guidelines|FAG)\s*(rules|policies|content|information)',
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'(faculty applications compendium)\s*(rules|policies|content|information|forms)', 
+            (r'(faculty applications compendium|FAC)\s*(rules|policies|content|information|forms)',
              'NMIMS_Faculty_Applications_Compendium.pdf'),
-            (r'tell me (about|the)\s*(resource book|employee book|ERB)', 
+            (r'tell me (about|the)\s*(resource book|employee book|ERB)',
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'tell me (about|the)\s*(academic guidelines|FAG)', 
+            (r'tell me (about|the)\s*(academic guidelines|FAG)',
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'tell me (about|the)\s*(applications compendium|forms compendium)', 
+            (r'tell me (about|the)\s*(applications compendium|forms compendium|FAC)',
              'NMIMS_Faculty_Applications_Compendium.pdf'),
-            (r'what (is|are) (in|the)\s*(resource book|employee book|ERB)', 
+            (r'what (is|are) (in|the)\s*(resource book|employee book|ERB)',
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'what (is|are) (in|the)\s*(academic guidelines|FAG)', 
+            (r'what (is|are) (in|the)\s*(academic guidelines|FAG)',
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
+            (r'what (is|are) (in|the)\s*(applications compendium|FAC)',
+             'NMIMS_Faculty_Applications_Compendium.pdf'),
+            # Short-form abbreviations used in isolation (as whole words)
+            (r'(?<![A-Za-z])ERB(?![A-Za-z])',
+             'NMIMS_Employee_Resource_Book_2024-25.pdf'),
+            (r'(?<![A-Za-z])FAG(?![A-Za-z])',
+             'NMIMS_Faculty_Academic_Guidelines.pdf'),
+            (r'(?<![A-Za-z])FAC(?![A-Za-z])',
+             'NMIMS_Faculty_Applications_Compendium.pdf'),
         ]
         
         for pattern, doc_name in document_patterns:
@@ -613,18 +623,53 @@ class QueryAnalyzer:
     def _detect_intent(self, query: str) -> str:
         """
         Detect query intent using pattern matching with scoring.
-        
+
         Returns the intent with highest confidence score.
         """
+        # Form-code queries (e.g. "HR-LA-01", "Form CL-7") are actually
+        # procedure/how-to-fill questions — they should not fall through to
+        # policy_lookup. Catch them before generic scoring so the prompt
+        # router picks FORM_DETAILS_PROMPT / PROCEDURE_PROMPT.
+        form_code_re = re.compile(r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', re.IGNORECASE)
+        form_code_present = bool(form_code_re.search(query))
+        procedure_verbs = any(
+            re.search(p, query, re.IGNORECASE) for p in [
+                r"\bhow\s+to\b", r"\bfill\b", r"\bsubmit\b",
+                r"\bapply\b", r"\bapplication\b", r"\bprocess\b",
+                r"\bprocedure\b", r"\bsteps\b", r"\brequest\b",
+            ]
+        )
+        form_noun = bool(re.search(r"\bform\b", query, re.IGNORECASE))
+        # Route form-centric queries to the form_details prompt so the LLM
+        # gets form-specific instructions (sections, fields, approval chain).
+        # Explicit how-to language still routes to procedure.
+        if form_code_present or form_noun:
+            if procedure_verbs and not form_code_present:
+                return "procedure"
+            if form_code_present and procedure_verbs:
+                return "procedure"
+            return "form_details"
+
+        # Definition-shaped queries — "what is a sabbatical", "define X",
+        # "meaning of Y" — should get the dictionary-style DEFINITION_PROMPT.
+        definition_patterns = [
+            r"^\s*define\s+\S+",
+            r"^\s*what\s+does\s+\S.+\s+mean",
+            r"\bmeaning\s+of\b",
+            r"\bdefinition\s+of\b",
+        ]
+        if any(re.search(p, query, re.IGNORECASE) for p in definition_patterns):
+            return "definition"
+
         intent_scores = {}
-        
+
         for intent, patterns in self.intent_patterns.items():
             score = 0
             for pattern in patterns:
                 if re.search(pattern, query, re.IGNORECASE):
                     score += 1
             intent_scores[intent] = score
-        
+
         # Return intent with highest score, or general if no matches
         if max(intent_scores.values()) > 0:
             top = max(intent_scores, key=intent_scores.get)
@@ -633,6 +678,12 @@ class QueryAnalyzer:
             # hybrid-search weights can differ for these two very different
             # query shapes.
             if top == "lookup":
+                # A bare form code with no surrounding procedure verbs is
+                # still a "what is this form" lookup — treat as procedure
+                # so the user gets step-by-step guidance.
+                if form_code_present:
+                    return "procedure"
+
                 person_signals = [
                     r"\b(dr|prof|professor|mr|ms|mrs|miss)\.?\b",
                     r"\bfaculty\b", r"\bteacher\b", r"\blecturer\b",
@@ -642,8 +693,6 @@ class QueryAnalyzer:
                 ]
                 policy_signals = [
                     r"\bpolicy\b", r"\bclause\b", r"\bsection\b",
-                    r"\bform\b", r"\bapplication\b",
-                    r"\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b",
                     r"\bleave\b", r"\bsabbatical\b", r"\bgratuity\b",
                     r"\bprovident\s+fund\b", r"\bmedical\s+reimbursement\b",
                     r"\bagreement\b", r"\bcontract\b",
@@ -743,33 +792,37 @@ class QueryAnalyzer:
         self,
         domain: str,
         is_current_only: bool,
-        entities: List[str]
+        entities: List[str],
     ) -> Dict[str, Any]:
         """
-        Build metadata filters based on query understanding.
+        Build Qdrant metadata filters for pre-search pruning.
 
-        Filters are applied during vector search to narrow results.
+        Strategy is intentionally conservative — over-filtering hurts recall
+        badly on small corpora, so we only attach filters for signals we're
+        confident about (e.g. an explicit "current/latest" request). Any key
+        we don't want to filter on is simply left off the returned dict;
+        downstream code treats an empty dict as "no filter applied".
 
         Args:
-            domain: Detected domain (faculty_info, policies, procedures)
-            is_current_only: Whether to filter for current documents
-            entities: Extracted entities (names, departments, etc.)
+            domain: Detected domain (faculty_info, policies, procedures, ...)
+            is_current_only: True when the query asked for the latest version.
+            entities: Normalized entity tokens pulled from the query.
 
         Returns:
-            Dict of metadata filters for Qdrant
+            Dict suitable for ``VectorDBClient._build_filter``.
         """
-        filters = {}
+        filters: Dict[str, Any] = {}
 
-        # NOTE: `domain` and `is_current` are NOT currently written to chunk
-        # metadata during ingestion (see src/chunking/document_chunker.py).
-        # Emitting these as Qdrant filters caused every search to return zero
-        # hits. They are intentionally omitted until ingestion populates them.
-        # The detected values remain on the QueryUnderstanding object for
-        # downstream weighting/observability.
+        # Only pre-filter on "current" when the user asked for it explicitly.
+        # We don't infer it from ambient context because the corpus is small
+        # and stale-document filtering cuts recall more than it helps.
+        if is_current_only:
+            filters["is_current"] = True
+
+        # Domain filtering is reserved for future extensions once we have
+        # enough document-level metadata to distinguish faculty-profile
+        # chunks from policy chunks reliably. Keeping it off for now.
         _ = domain
-        _ = is_current_only
-
-        # Entity-based filtering (e.g., department, document type)
-        # This can be expanded based on your metadata schema
+        _ = entities
 
         return filters

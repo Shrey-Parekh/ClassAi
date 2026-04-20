@@ -264,24 +264,39 @@ class AnswerGenerator:
 
         # Calculate confidence
         confidence = self._calculate_confidence(chunks_to_use, structured)
-        
+
+        # Citation grounding: verify each claim has support in the retrieved
+        # chunks. Ungrounded spans mean the LLM may have hallucinated, so we
+        # downgrade the confidence rather than present an unsupported answer
+        # as authoritative. See ``_check_grounding`` for the full heuristic.
+        grounding = self._check_grounding(structured, chunks_to_use)
+        if grounding["ratio"] < 0.5 and confidence in ("high", "medium"):
+            self.logger.warning(
+                "Grounding ratio %.2f below 0.5 — downgrading confidence from %s",
+                grounding["ratio"], confidence,
+            )
+            confidence = "low"
+        elif grounding["ratio"] < 0.25:
+            confidence = "none"
+
         # Log context usage
         self._log_context_usage(query, chunks_to_use, estimated_context_tokens)
-        
+
         # Use model_dump() for Pydantic v2 compatibility
         try:
             structured_dict = structured.model_dump()
         except AttributeError:
             # Fallback for Pydantic v1
             structured_dict = structured.dict()
-        
+
         return {
             "structured": structured_dict,
             "sources": sources,
             "chunks_used": len(chunks_to_use),
             "intent": intent_type,
             "confidence": confidence,
-            "tokens_used": estimated_context_tokens
+            "tokens_used": estimated_context_tokens,
+            "grounding": grounding,
         }
     
     def _parse_json_response(
@@ -514,33 +529,150 @@ class AnswerGenerator:
         else:
             return "none"
 
-    
+    # -- Citation grounding --------------------------------------------------
+    #
+    # Even with tight prompts the LLM occasionally invents specifics (dates,
+    # durations, form codes) that aren't in the retrieved chunks. We detect
+    # that post-hoc by shingling both the answer and the chunk text and
+    # measuring what fraction of the answer's content-bearing sentences has
+    # any overlap with chunk text. A low overlap ratio is a strong signal of
+    # hallucination, so the caller downgrades confidence accordingly.
+
+    _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-/]*")
+    _SENT_SPLIT = re.compile(r"(?<=[.\!?])\s+(?=[A-Z0-9])")
+    _STOPWORDS = frozenset({
+        "the", "a", "an", "and", "or", "but", "of", "in", "on", "at", "to",
+        "for", "with", "by", "from", "as", "is", "are", "was", "were", "be",
+        "been", "being", "it", "its", "this", "that", "these", "those", "if",
+        "then", "than", "so", "not", "no", "yes", "can", "may", "will", "shall",
+        "should", "would", "could", "have", "has", "had", "do", "does", "did",
+    })
+
+    @classmethod
+    def _normalize_text(cls, text: str) -> List[str]:
+        """Lowercase, tokenize, and strip trivial stopwords."""
+        tokens = cls._WORD_RE.findall((text or "").lower())
+        return [t for t in tokens if t not in cls._STOPWORDS and len(t) > 1]
+
+    @classmethod
+    def _shingle_set(cls, tokens: List[str], n: int = 4) -> set:
+        """Produce an n-gram shingle set; falls back to unigrams for short text."""
+        if not tokens:
+            return set()
+        if len(tokens) < n:
+            return set(tokens)
+        return {" ".join(tokens[i:i + n]) for i in range(len(tokens) - n + 1)}
+
+    def _extract_answer_sentences(self, structured: Any) -> List[str]:
+        """Flatten a StructuredResponse into discrete content-bearing sentences."""
+        sentences: List[str] = []
+        sections = getattr(structured, "sections", None) or []
+        for section in sections:
+            content = getattr(section, "content", None)
+            if isinstance(content, str) and content.strip():
+                sentences.extend(self._SENT_SPLIT.split(content.strip()))
+            items = getattr(section, "items", None)
+            if isinstance(items, list):
+                for item in items:
+                    if isinstance(item, str) and item.strip():
+                        sentences.append(item.strip())
+                    elif isinstance(item, dict):
+                        for key in ("text", "content", "description", "body"):
+                            val = item.get(key)
+                            if isinstance(val, str) and val.strip():
+                                sentences.append(val.strip())
+                                break
+        summary = getattr(structured, "summary", None)
+        if isinstance(summary, str) and summary.strip():
+            sentences.extend(self._SENT_SPLIT.split(summary.strip()))
+        return [s for s in (s.strip() for s in sentences) if len(s.split()) >= 4]
+
+    def _check_grounding(
+        self,
+        structured: Any,
+        chunks: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Estimate how much of the generated answer is supported by chunks.
+
+        Returns a dict with ``ratio`` (0..1), ``grounded``/``total`` counts,
+        up to three ``ungrounded_samples`` for triage, and a ``reason`` tag.
+        The method is deliberately lenient: 4-grams after stopword removal
+        let paraphrased-but-faithful sentences still match, while a
+        hallucinated fact (new form code, invented duration) will produce
+        a nearly empty intersection.
+        """
+        sentences = self._extract_answer_sentences(structured)
+        if not sentences:
+            return {"ratio": 0.0, "grounded": 0, "total": 0,
+                    "ungrounded_samples": [], "reason": "no_answer_sentences"}
+        if not chunks:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3], "reason": "no_chunks"}
+
+        chunk_tokens: List[str] = []
+        for chunk in chunks:
+            text = (
+                chunk.get("text")
+                or chunk.get("content")
+                or chunk.get("chunk_text")
+                or chunk.get("payload", {}).get("text", "")
+                or ""
+            )
+            chunk_tokens.extend(self._normalize_text(text))
+
+        chunk_shingles = self._shingle_set(chunk_tokens, n=3)
+        chunk_unigrams = set(chunk_tokens)
+
+        if not chunk_shingles and not chunk_unigrams:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3],
+                    "reason": "empty_chunk_shingles"}
+
+        grounded = 0
+        ungrounded: List[str] = []
+        for sentence in sentences:
+            s_tokens = self._normalize_text(sentence)
+            if not s_tokens:
+                # All-stopword sentence — nothing distinctive to hallucinate.
+                grounded += 1
+                continue
+            s_shingles = self._shingle_set(s_tokens, n=3)
+            s_unigrams = set(s_tokens)
+            if s_shingles & chunk_shingles:
+                grounded += 1
+                continue
+            # Token Jaccard fallback — paraphrases still share most
+            # distinctive tokens even when 3-grams miss.
+            overlap = len(s_unigrams & chunk_unigrams) / len(s_unigrams)
+            if overlap >= 0.5:
+                grounded += 1
+            else:
+                ungrounded.append(sentence)
+
+        ratio = grounded / len(sentences)
+        return {
+            "ratio": round(ratio, 3),
+            "grounded": grounded,
+            "total": len(sentences),
+            "ungrounded_samples": ungrounded[:3],
+            "reason": "ok" if ratio >= 0.5 else "low_overlap",
+        }
+
     def _log_context_usage(
         self,
         query: str,
         chunks: List[Dict[str, Any]],
-        tokens_used: int
+        tokens_used: int,
     ) -> None:
-        """
-        Log context usage to file for analysis.
-        
-        Args:
-            query: Original query
-            chunks: Chunks used
-            tokens_used: Estimated tokens used
-        """
+        """Log context usage to file for later analysis."""
         import json
         from datetime import datetime
         from pathlib import Path
-        
+
         try:
-            # Create logs directory
             log_dir = Path("logs")
             log_dir.mkdir(exist_ok=True)
-            
-            # Append to log file
             log_file = log_dir / "context_usage.jsonl"
-
             log_entry = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "query": query,
@@ -549,8 +681,7 @@ class AnswerGenerator:
                 "max_context_tokens": self.MAX_CONTEXT_TOKENS,
                 "available_for_chunks": self.AVAILABLE_FOR_CHUNKS,
             }
-
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
-            self.logger.warning(f"Failed to log context usage: {e}")
+            self.logger.error(f"Failed to log context usage: {e}")

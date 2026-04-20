@@ -158,6 +158,48 @@ class VectorDBClient:
         """Delete a collection."""
         self.client.delete_collection(collection_name)
         print(f"✓ Deleted collection: {collection_name}")
+
+    def delete_by_document_name(
+        self,
+        collection_name: str,
+        document_name: str,
+    ) -> int:
+        """
+        Delete all points whose payload.document_name == ``document_name``.
+
+        Used by the incremental ingestion pipeline when a file's content hash
+        has changed: stale chunks (which may now have invalid section indices,
+        outdated text, etc.) must be removed before the new chunks are inserted
+        to avoid duplicates and ghost retrievals.
+
+        Returns the number of points that were targeted (best-effort: Qdrant
+        does not always return a deletion count). Returns 0 when no matching
+        points exist or on best-effort deletion failure.
+        """
+        qfilter = Filter(must=[
+            FieldCondition(key="document_name", match=MatchValue(value=document_name))
+        ])
+
+        # Best-effort: count first so the caller can log how much was purged.
+        try:
+            count_resp = self.client.count(
+                collection_name=collection_name,
+                count_filter=qfilter,
+                exact=True,
+            )
+            n = int(getattr(count_resp, "count", 0) or 0)
+        except Exception:
+            n = 0
+
+        try:
+            self.client.delete(
+                collection_name=collection_name,
+                points_selector=qfilter,
+            )
+        except Exception as e:
+            print(f"   ⚠ delete_by_document_name({document_name!r}) failed: {e}")
+            return 0
+        return n
     
     def _build_filter(self, filters: Dict[str, Any]) -> Filter:
         """Build Qdrant filter from dict."""

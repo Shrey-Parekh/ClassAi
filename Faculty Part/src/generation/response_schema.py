@@ -2,7 +2,7 @@
 Pydantic schema for structured JSON responses.
 """
 
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Any
 from pydantic import BaseModel, Field
 
 
@@ -40,7 +40,14 @@ class TableSection(BaseModel):
     heading: Optional[str] = None
     type: Literal["table"] = "table"
     headers: List[str] = []
-    rows: List[List[str]] = []
+    rows: List[List[Optional[str]]] = []
+
+    def model_post_init(self, __context: Any) -> None:
+        # Coerce None cells to empty string
+        self.rows = [
+            [cell if cell is not None else "" for cell in row]
+            for row in self.rows
+        ]
 
 
 # Union type for all section types

@@ -1,0 +1,224 @@
+# Ground-truth eval set for the NMIMS faculty RAG pipeline.
+#
+# Each entry has:
+#   id                — stable short identifier (used in reports)
+#   query             — the user-facing query string
+#   intent_expected   — one of lookup|procedure|eligibility|form_details|
+#                       definition|topic_search|policy_lookup|general
+#   document_expected — substring that MUST appear in at least one retrieved
+#                       chunk's document_name (recall@k check)
+#   keywords_any      — list of strings; at least one MUST appear in the
+#                       generated answer (very cheap correctness signal)
+#   keywords_all      — list of strings; ALL must appear in the answer
+#                       (only used for queries with a single clear answer,
+#                        e.g. a specific form code)
+#   min_grounding     — minimum acceptable grounding ratio (default 0.5)
+#   notes             — free-text for humans only; ignored by the harness
+#
+# We intentionally keep the list flat (no nested sections) so the harness
+# can iterate once without bookkeeping. Add queries as new YAML items —
+# the harness picks them up automatically.
+
+queries:
+  # --- Compendium / Form lookups -----------------------------------------
+  - id: form-la-01-lookup
+    query: "What is HR-LA-01?"
+    intent_expected: form_details
+    document_expected: "Compendium"
+    keywords_any: ["HR-LA-01", "leave", "application"]
+    notes: "Compendium form code; should route to form_details."
+
+  - id: form-la-01-how-to-fill
+    query: "How do I fill the HR-LA-01 leave application form?"
+    intent_expected: procedure
+    document_expected: "Compendium"
+    keywords_any: ["HR-LA-01", "Section", "leave"]
+
+  - id: form-co-01-how-to-fill
+    query: "How do I fill Form HR-CO-01?"
+    intent_expected: procedure
+    document_expected: "Compendium"
+    keywords_any: ["HR-CO-01", "Section"]
+
+  - id: form-te-02
+    query: "Tell me about Form HR-TE-02"
+    intent_expected: form_details
+    document_expected: "Compendium"
+    keywords_any: ["HR-TE-02"]
+
+  - id: form-cr-01
+    query: "What does Form HR-CR-01 capture?"
+    intent_expected: form_details
+    document_expected: "Compendium"
+    keywords_any: ["HR-CR-01"]
+
+  - id: form-pb-01
+    query: "Explain Form HR-PB-01 and its sections"
+    intent_expected: form_details
+    document_expected: "Compendium"
+    keywords_any: ["HR-PB-01", "Section"]
+
+  - id: form-la-01-section-b
+    query: "What goes in Section B of HR-LA-01?"
+    intent_expected: procedure
+    document_expected: "Compendium"
+    keywords_any: ["HR-LA-01", "Section"]
+
+  - id: form-overview
+    query: "List the application forms in the NMIMS faculty compendium"
+    intent_expected: document_overview
+    document_expected: "Compendium"
+    keywords_any: ["HR-", "form"]
+
+  # --- Employee Resource Book / HR policies -------------------------------
+  - id: policy-leave
+    query: "What leave policies apply to faculty?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["leave", "casual", "earned", "annual"]
+
+  - id: policy-maternity
+    query: "What is the maternity leave policy?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["maternity", "leave"]
+
+  - id: policy-paternity
+    query: "Is there a paternity leave policy?"
+    intent_expected: eligibility
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["paternity", "leave"]
+
+  - id: policy-retirement
+    query: "What is the retirement age for faculty?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["retirement", "age"]
+
+  - id: policy-health-insurance
+    query: "What health insurance benefits do faculty get?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["health", "insurance", "medical"]
+
+  - id: policy-code-of-conduct
+    query: "Summarize the employee code of conduct"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["conduct", "behavior", "professional"]
+
+  - id: policy-working-hours
+    query: "What are the working hours for faculty members?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["working", "hours"]
+
+  - id: policy-harassment
+    query: "What is the anti-harassment policy?"
+    intent_expected: policy_lookup
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["harassment", "policy"]
+
+  # --- Faculty Academic Guidelines ---------------------------------------
+  - id: guideline-teaching-load
+    query: "What is the expected teaching load for faculty?"
+    intent_expected: policy_lookup
+    document_expected: "Academic_Guidelines"
+    keywords_any: ["teaching", "load", "hours", "credits"]
+
+  - id: guideline-research
+    query: "What are the research expectations for faculty?"
+    intent_expected: policy_lookup
+    document_expected: "Academic_Guidelines"
+    keywords_any: ["research", "publication"]
+
+  - id: guideline-promotion
+    query: "How does faculty promotion work?"
+    intent_expected: procedure
+    document_expected: "Academic_Guidelines"
+    keywords_any: ["promotion", "criteria"]
+
+  - id: guideline-appraisal
+    query: "How is faculty performance appraisal conducted?"
+    intent_expected: procedure
+    document_expected: "Academic_Guidelines"
+    keywords_any: ["appraisal", "performance"]
+
+  - id: guideline-phd-guidance
+    query: "Can faculty guide PhD students?"
+    intent_expected: eligibility
+    document_expected: "Academic_Guidelines"
+    keywords_any: ["PhD", "guide", "supervisor", "doctoral"]
+
+  # --- Eligibility questions ----------------------------------------------
+  - id: elig-sabbatical
+    query: "Am I eligible for sabbatical leave?"
+    intent_expected: eligibility
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["sabbatical", "eligible", "years"]
+
+  - id: elig-casual-leave
+    query: "How many days of casual leave am I entitled to?"
+    intent_expected: eligibility
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["casual", "leave", "days"]
+
+  - id: elig-travel-grant
+    query: "Can I claim international conference travel?"
+    intent_expected: eligibility
+    document_expected: "Compendium"
+    keywords_any: ["travel", "conference"]
+
+  # --- Procedure questions ------------------------------------------------
+  - id: proc-apply-sabbatical
+    query: "How do I apply for a sabbatical?"
+    intent_expected: procedure
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["sabbatical", "apply"]
+
+  - id: proc-submit-claim
+    query: "How do I submit a reimbursement claim?"
+    intent_expected: procedure
+    document_expected: "Compendium"
+    keywords_any: ["claim", "submit", "reimbursement"]
+
+  - id: proc-update-profile
+    query: "How do I update my faculty profile?"
+    intent_expected: procedure
+    document_expected: ""
+    keywords_any: ["profile", "update"]
+    notes: "May not exist in the corpus — tests graceful 'no answer' response."
+
+  # --- Definition questions -----------------------------------------------
+  - id: def-sabbatical
+    query: "Define sabbatical leave"
+    intent_expected: definition
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["sabbatical"]
+
+  - id: def-casual-leave
+    query: "What does casual leave mean?"
+    intent_expected: definition
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["casual", "leave"]
+
+  - id: def-loss-of-pay
+    query: "What is the definition of loss of pay?"
+    intent_expected: definition
+    document_expected: "Employee_Resource_Book"
+    keywords_any: ["loss", "pay"]
+
+  # --- Out-of-scope / negative controls ----------------------------------
+  - id: oos-weather
+    query: "What's the weather in Mumbai today?"
+    intent_expected: general
+    document_expected: ""
+    keywords_any: ["don't", "don't have", "not available", "no information"]
+    notes: "Out of scope — should fall back gracefully."
+
+  - id: oos-stock-price
+    query: "What is Anthropic's stock price?"
+    intent_expected: general
+    document_expected: ""
+    keywords_any: ["don't", "don't have", "not available", "no information"]
+    notes: "Out of scope — should fall back gracefully."

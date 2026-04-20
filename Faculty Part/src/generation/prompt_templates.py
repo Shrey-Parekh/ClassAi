@@ -15,7 +15,9 @@ SHARED_RULES = """STRICT RULES:
 3. Do NOT suggest checking websites, portals, or external sources
 4. Do NOT say "typically" or "usually" — only state what the documents say
 5. Do NOT hallucinate form fields, procedures, or policies not in context
-6. Use section type "table" with "headers" and "rows" arrays when the answer is tabular data"""
+6. Use section type "table" with "headers" and "rows" arrays when the answer is tabular data
+7. Every factual claim must be traceable to a phrase in the CONTEXT — if you can't point to supporting text, omit the claim
+8. Prefer direct quotes or close paraphrases; avoid invented durations, dates, or amounts"""
 
 
 # Intent-specific JSON prompts
@@ -224,6 +226,74 @@ If policy not found:
 Return ONLY valid JSON. No other text."""
 
 
+FORM_DETAILS_PROMPT = """You are a faculty information assistant for NMIMS University.
+
+{shared_rules}
+
+EXTRA RULES FOR FORM QUERIES:
+- Surface the form code (HR-XX-NN / CL-N / FAG-N etc.) exactly as it appears.
+- List sections A/B/C/D in the order the form uses them.
+- If the form has required fields, list them in a "bullets" section under "Required Fields".
+- If there's a "who signs" or "who approves" chain, capture it in a "steps" section.
+
+CONTEXT:
+{context}
+
+QUESTION: {query}
+
+Return JSON using this structure (see intent=form_details). Include a
+"Purpose", "Required Fields" (bullets), "Approval Chain" (steps) and
+"Important Notes" (alert) when supported by the context:
+
+{{
+  "intent": "form_details",
+  "title": "HR-LA-01 - Leave Application",
+  "subtitle": "Section A: applicant details",
+  "sections": [
+    {{"heading": "Purpose", "type": "paragraph", "content": "..."}},
+    {{"heading": "Required Fields", "type": "bullets", "items": ["..."]}},
+    {{"heading": "Approval Chain", "type": "steps", "items": ["..."]}}
+  ],
+  "footer": null,
+  "confidence": "high",
+  "fallback": null
+}}
+
+If form not found:
+{{
+  "intent": "form_details",
+  "title": "Form Not Found",
+  "subtitle": null,
+  "sections": [],
+  "footer": null,
+  "confidence": "none",
+  "fallback": "I don't have details for that form in the available documents."
+}}
+
+Return ONLY valid JSON. No other text."""
+
+
+DEFINITION_PROMPT = """You are a faculty information assistant for NMIMS University.
+
+{shared_rules}
+
+EXTRA RULES FOR DEFINITION QUERIES:
+- Lead with a one-sentence definition of the term.
+- Follow with any scope / applicability notes from the context.
+- Prefer the exact wording used in NMIMS policy over synonyms.
+
+CONTEXT:
+{context}
+
+QUESTION: {query}
+
+Return JSON with intent="definition" and a "Definition" section followed
+by optional "Scope" bullets. If term not found, return confidence="none"
+with fallback text explaining it wasn't in the documents.
+
+Return ONLY valid JSON. No other text."""
+
+
 GENERAL_PROMPT = """You are a faculty information assistant for NMIMS University.
 
 {shared_rules}
@@ -273,23 +343,15 @@ INTENT_PROMPTS = {
     "procedure": PROCEDURE_PROMPT,
     "eligibility": ELIGIBILITY_PROMPT,
     "policy_lookup": ELIGIBILITY_PROMPT,
+    "form_details": FORM_DETAILS_PROMPT,
+    "form_lookup": FORM_DETAILS_PROMPT,
+    "definition": DEFINITION_PROMPT,
+    "document_overview": GENERAL_PROMPT,
     "general": GENERAL_PROMPT,
 }
 
 
 def get_prompt(intent: str, context: str, query: str) -> str:
-    """
-    Get JSON prompt template for the given intent.
-    
-    Args:
-        intent: Detected intent type
-        context: Retrieved context chunks
-        query: Original user query
-    
-    Returns:
-        Formatted prompt string with JSON instructions
-    """
-    # Get prompt template for intent (fallback to general)
+    """Get JSON prompt template for the given intent."""
     template = INTENT_PROMPTS.get(intent.lower(), GENERAL_PROMPT)
-    
     return template.format(shared_rules=SHARED_RULES, context=context, query=query)

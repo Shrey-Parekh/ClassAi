@@ -27,6 +27,7 @@ from ..utils.query_embedder import QueryEmbedder
 from ..utils.llm import LLMClient
 from ..utils.cache_manager import CacheManager
 from ..utils.conversation_manager import ConversationManager
+from ..utils.query_logger import get_default_logger as _get_query_logger
 from ..utils.rate_limiter import RateLimiter
 
 # WARNING: This is a demo auth system for development only.
@@ -314,7 +315,40 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     
     # Update request with sanitized query
     request.query = query
-    
+
+    # Follow-up coreference rewrite: when the user sends "what about it?" or
+    # "tell me more" we prepend the strongest topic anchor (form code,
+    # proper-noun phrase) mined from the preceding turns. This lets BM25 +
+    # dense retrieval hit the right chunks without having to summon the
+    # LLM just to resolve the pronoun. If there's no session or the query
+    # isn't a follow-up, rewrite returns the original query unchanged.
+    # Begin structured query log. We attach every pipeline stage to this
+    # entry and flush it to data/logs/retrieval.jsonl right before
+    # returning, so failures still leave a trace of what happened.
+    query_log_entry = _get_query_logger().start(
+        query=request.query,
+        session_id=request.session_id,
+    )
+
+    if request.session_id and conversation_manager:
+        try:
+            rewrite = conversation_manager.rewrite_followup_query(
+                session_id=request.session_id,
+                query=request.query,
+            )
+            if rewrite.get("is_followup") and rewrite.get("rewritten") != request.query:
+                print(
+                    f"[FOLLOWUP] rewrote "
+                    f"{request.query!r} -> {rewrite['rewritten']!r} "
+                    f"(anchor={rewrite.get('anchor')})"
+                )
+                query_log_entry.rewritten_query = rewrite["rewritten"]
+                query_log_entry.followup_anchor = rewrite.get("anchor")
+                request.query = rewrite["rewritten"]
+        except Exception as e:
+            # Never let a rewrite failure take down a query.
+            print(f"[FOLLOWUP] rewrite failed: {e}")
+
     # Handle streaming request
     if request.stream:
         return StreamingResponse(
@@ -358,6 +392,13 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         )
         
         print(f"[PIPELINE] Retrieval complete. Found {len(retrieval_result['chunks'])} chunks")
+        # Capture retrieval stage in the structured log.
+        query_log_entry.intent = retrieval_result.get("intent")
+        query_log_entry.filters_applied = retrieval_result.get("metadata", {}).get("filters_applied", {}) or {}
+        _get_query_logger().attach_retrieval(
+            query_log_entry, retrieval_result.get("chunks", []), stage="retrieved"
+        )
+        _get_query_logger().mark(query_log_entry, "retrieval")
         
         # Check if any chunks were retrieved
         if not retrieval_result["chunks"]:
@@ -438,6 +479,14 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
             }
         }
         
+        # Flush structured query log (answer, grounding, latency).
+        query_log_entry.answer = answer_result.get("structured")
+        query_log_entry.grounding = answer_result.get("grounding")
+        query_log_entry.confidence = answer_result.get("confidence")
+        query_log_entry.chunks_used = answer_result.get("chunks_used")
+        _get_query_logger().mark(query_log_entry, "generation")
+        _get_query_logger().finalize(query_log_entry)
+
         # Cache the result
         cache_manager.set_query_result(request.query, request.top_k or 15, result, ttl=3600)
         
@@ -472,6 +521,13 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         print("\nFull traceback:")
         print(traceback.format_exc())
         print("=" * 80)
+        # Still flush the partial log entry — failures are the most
+        # important rows to keep around for offline debugging.
+        try:
+            query_log_entry.error = f"{type(e).__name__}: {e}"
+            _get_query_logger().finalize(query_log_entry)
+        except Exception:
+            pass
         
         # Return user-friendly error
         raise HTTPException(
@@ -572,95 +628,25 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
                 request.session_id,
                 "assistant",
                 result["answer"],
-                metadata={"sources": result["sources"], "intent": result["intent"]}
+                metadata={"sources": result["sources"], "intent": result["intent"]},
             )
-        
+
         yield f"event: result\ndata: {json.dumps(result)}\n\n"
         yield "event: done\ndata: {}\n\n"
-        print(f"[SSE] Stream complete")
-        
+
     except Exception as e:
         import traceback
         print("=" * 80)
-        print("[SSE ERROR] Exception in stream handler")
+        print("CRITICAL ERROR IN STREAMING ENDPOINT")
         print("=" * 80)
         print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("\nFull traceback:")
+        print(f"Error message: {e}")
         print(traceback.format_exc())
         print("=" * 80)
-        
-        yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'message': 'An error occurred while processing your query.'})}\n\n"
         yield "event: done\ndata: {}\n\n"
-
-
-@app.post("/conversation/new")
-async def create_conversation():
-    """Create new conversation session."""
-    if not conversation_manager:
-        raise HTTPException(status_code=503, detail="Conversation manager not initialized")
-    
-    session_id = conversation_manager.create_session()
-    return {"session_id": session_id}
-
-
-@app.get("/conversation/{session_id}")
-async def get_conversation(session_id: str, limit: Optional[int] = None):
-    """Get conversation history."""
-    if not conversation_manager:
-        raise HTTPException(status_code=503, detail="Conversation manager not initialized")
-    
-    history = conversation_manager.get_history(session_id, limit)
-    return {"session_id": session_id, "messages": history}
-
-
-@app.delete("/conversation/{session_id}")
-async def delete_conversation(session_id: str):
-    """Delete conversation session."""
-    if not conversation_manager:
-        raise HTTPException(status_code=503, detail="Conversation manager not initialized")
-    
-    conversation_manager.clear_session(session_id)
-    return {"status": "deleted", "session_id": session_id}
-
-
-@app.get("/conversations")
-async def list_conversations():
-    """List all conversation sessions."""
-    if not conversation_manager:
-        raise HTTPException(status_code=503, detail="Conversation manager not initialized")
-    
-    sessions = conversation_manager.list_sessions()
-    return {"sessions": sessions}
-
-
-# Serve frontend
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
-frontend_path = Path(__file__).parent.parent.parent / "frontend"
-
-@app.get("/app")
-async def serve_app():
-    """Serve the chat interface (deprecated - use /chat)."""
-    return FileResponse(str(frontend_path / "chat.html"))
-
-
-@app.get("/chat")
-async def serve_chat():
-    """Serve the chat interface."""
-    return FileResponse(str(frontend_path / "chat.html"))
-
-
-@app.get("/signin")
-async def serve_signin():
-    """Serve the sign-in page."""
-    return FileResponse(str(frontend_path / "signin.html"))
-
-
-app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run("src.api.main:app", host="0.0.0.0", port=8000, reload=False)

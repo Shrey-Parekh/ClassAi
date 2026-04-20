@@ -1,24 +1,53 @@
 {
+  "_comment": "Example metadata schema. Each top-level key is a document filename (as it appears under data/raw). Each value is a metadata object with the fields described in _schema. Copy this file to metadata.json and replace these entries with your own.",
+  "_schema": {
+    "doc_id": "string — stable identifier used for deduplication and chunk IDs",
+    "title": "string — human-readable document title",
+    "date": "string — effective date in YYYY-MM-DD format",
+    "applies_to": "string — scope. One of: all_faculty, teaching_staff, non_teaching_staff, research_staff",
+    "document_type": "string — chunking hint. One of: policy, guideline, procedure, form, database, legal, general",
+    "domain": "string — broad topic bucket. One of: policies, procedures, faculty_info, legal, benefits, academic",
+    "is_current": "bool — whether this version is currently in effect",
+    "superseded_by": "string|null — doc_id of the newer version that replaced this one, else null"
+  },
   "leave_policy_2024.pdf": {
     "doc_id": "leave_policy_2024",
     "title": "Faculty Leave Policy 2024",
     "date": "2024-01-15",
     "applies_to": "teaching_staff",
     "document_type": "policy",
-    "supersedes": "leave_policy_2023"
+    "domain": "policies",
+    "is_current": true,
+    "superseded_by": null
   },
   "exam_duty_guidelines.pdf": {
     "doc_id": "exam_duty_2024",
     "title": "Examination Duty Guidelines",
     "date": "2024-03-01",
     "applies_to": "all_faculty",
-    "document_type": "procedure"
+    "document_type": "guideline",
+    "domain": "academic",
+    "is_current": true,
+    "superseded_by": null
   },
   "research_grant_form.pdf": {
     "doc_id": "research_grant_form",
     "title": "Research Grant Application Form",
     "date": "2024-02-10",
     "applies_to": "teaching_staff",
-    "document_type": "form"
+    "document_type": "form",
+    "domain": "procedures",
+    "is_current": true,
+    "superseded_by": null
+  },
+  "leave_policy_2023.pdf": {
+    "doc_id": "leave_policy_2023",
+    "title": "Faculty Leave Policy 2023",
+    "date": "2023-01-15",
+    "applies_to": "teaching_staff",
+    "document_type": "policy",
+    "domain": "policies",
+    "is_current": false,
+    "superseded_by": "leave_policy_2024"
   }
 }
