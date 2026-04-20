@@ -562,64 +562,6 @@ class NewIngestionPipeline:
                 print(f"  {reason:20s}: {count:>5}")
         
         print("=" * 60 + "\n")
-                matches the manifest (use after chunker / embedding changes).
-            dry_run: Run chunking only; do not embed, store, or update the
-                manifest. Useful for chunker validation in CI.
-
-        Returns:
-            List of ingestion summaries
-        """
-        print("\n" + "="*60)
-        print("STARTING DOCUMENT INGESTION")
-        print("="*60)
-
-        # Load metadata if provided
-        metadata_map = {}
-        if metadata_file and metadata_file.exists():
-            print(f"\n📋 Loading metadata from: {metadata_file.name}")
-            with open(metadata_file, 'r', encoding='utf-8') as f:
-                metadata_map = json.load(f)
-            print(f"   ✓ Loaded metadata for {len(metadata_map)} documents")
-
-        results = []
-
-        # Process all supported files
-        supported_extensions = [
-            '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md',
-            '.json', '.csv', '.xlsx', '.xls', '.docx'
-        ]
-
-        # Count files first
-        all_files = [f for f in directory.rglob('*')
-                     if f.is_file() and f.suffix.lower() in supported_extensions]
-
-        print(f"\n📁 Found {len(all_files)} documents to process")
-        print(f"   Directory: {directory}")
-        print(f"   Supported types: {', '.join(supported_extensions)}")
-
-        # Process each file
-        for idx, file_path in enumerate(all_files, 1):
-            print(f"\n[{idx}/{len(all_files)}] ", end="")
-
-            # Get metadata for this file
-            doc_metadata = metadata_map.get(file_path.name, {
-                "doc_id": file_path.stem,
-                "title": file_path.stem,
-                "applies_to": "all_faculty",
-            })
-
-            result = self.ingest_document(
-                file_path,
-                doc_metadata,
-                force_reingest=force_reingest,
-                dry_run=dry_run,
-            )
-            results.append(result)
-
-        # Print summary
-        self._print_summary(results)
-
-        return results
 
     # ---- Manifest helpers (content-hash incremental ingestion) -----------
 
