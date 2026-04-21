@@ -22,7 +22,8 @@ SHARED_RULES = """STRICT RULES:
 10. Use section type "alert" for deadlines, warnings, and must-do rules
 11. Use section type "paragraph" for narrative explanations
 12. Keep each paragraph under 150 words; keep bullets/steps under 8 items per section
-13. When stating a specific rule, eligibility criterion, or deadline, quote the exact phrase from context in double quotes"""
+13. When stating a specific rule, eligibility criterion, or deadline, quote the exact phrase from context in double quotes
+14. If USER FORMAT REQUIREMENTS are specified above, they override any default section-type suggestions in the examples below"""
 
 
 # Intent-specific JSON prompts

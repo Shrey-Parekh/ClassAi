@@ -78,6 +78,7 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = 5
     session_id: Optional[str] = None
     stream: Optional[bool] = False
+    format_override: Optional[Dict[str, str]] = None  # {"verbosity": "...", "structure": "..."}
 
 
 class SignInRequest(BaseModel):
@@ -353,6 +354,35 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         
         print(f"[PIPELINE] Retrieval complete. Found {len(retrieval_result['chunks'])} chunks")
         
+        # Apply format override if provided
+        format_preference = retrieval_result.get("format_preference")
+        if request.format_override:
+            from ..retrieval.query_understanding import FormatPreference
+            
+            # Validate and apply override
+            verbosity = request.format_override.get("verbosity", "standard")
+            structure = request.format_override.get("structure", "auto")
+            
+            # Validate values
+            valid_verbosity = ["brief", "standard", "detailed"]
+            valid_structure = ["auto", "paragraph", "bullets", "steps", "table"]
+            
+            if verbosity not in valid_verbosity:
+                print(f"[WARNING] Invalid verbosity override: {verbosity}, ignoring")
+                verbosity = "standard"
+            
+            if structure not in valid_structure:
+                print(f"[WARNING] Invalid structure override: {structure}, ignoring")
+                structure = "auto"
+            
+            format_preference = FormatPreference(
+                verbosity=verbosity,  # type: ignore
+                structure=structure,  # type: ignore
+                verbosity_trigger="API override",
+                structure_trigger="API override"
+            )
+            print(f"[FORMAT] Override applied: verbosity={verbosity}, structure={structure}")
+        
         # Check if any chunks were retrieved
         if not retrieval_result["chunks"]:
             fallback_response = {
@@ -383,7 +413,8 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
                 answer_generator.generate,
                 query=request.query,
                 retrieved_chunks=retrieval_result["chunks"],
-                intent_type=retrieval_result["intent"]
+                intent_type=retrieval_result["intent"],
+                format_preference=format_preference
             )
         
         # Check confidence and handle low-confidence responses
@@ -528,6 +559,29 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         
         print(f"[SSE] Retrieval complete: {len(retrieval_result['chunks'])} chunks")
         
+        # Apply format override if provided
+        format_preference = retrieval_result.get("format_preference")
+        if request.format_override:
+            from ..retrieval.query_understanding import FormatPreference
+            
+            verbosity = request.format_override.get("verbosity", "standard")
+            structure = request.format_override.get("structure", "auto")
+            
+            valid_verbosity = ["brief", "standard", "detailed"]
+            valid_structure = ["auto", "paragraph", "bullets", "steps", "table"]
+            
+            if verbosity not in valid_verbosity:
+                verbosity = "standard"
+            if structure not in valid_structure:
+                structure = "auto"
+            
+            format_preference = FormatPreference(
+                verbosity=verbosity,  # type: ignore
+                structure=structure,  # type: ignore
+                verbosity_trigger="API override",
+                structure_trigger="API override"
+            )
+        
         if not retrieval_result["chunks"]:
             print(f"[SSE] No chunks found")
             yield f"event: error\ndata: {json.dumps({'message': 'No relevant documents found'})}\n\n"
@@ -542,7 +596,8 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
             answer_generator.generate,
             query=request.query,
             retrieved_chunks=retrieval_result["chunks"],
-            intent_type=retrieval_result["intent"]
+            intent_type=retrieval_result["intent"],
+            format_preference=format_preference
         )
         
         print(f"[SSE] Generation complete")

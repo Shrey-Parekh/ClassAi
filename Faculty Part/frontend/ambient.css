@@ -1,0 +1,67 @@
+/* Ambient background: film grain + slow warm glow.
+   Both layers are fixed, non-interactive, below all UI. */
+
+.ambient-root {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+/* Warm radial glow — single, very slow figure-eight drift */
+.ambient-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1400px;
+    height: 1400px;
+    margin: -700px 0 0 -700px;
+    background: radial-gradient(
+        circle at center,
+        rgba(204, 120, 92, 0.08) 0%,
+        rgba(204, 120, 92, 0.04) 30%,
+        transparent 60%
+    );
+    animation: glow-drift 75s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    will-change: transform;
+}
+
+@keyframes glow-drift {
+    0%   { transform: translate(-20%, -15%); }
+    25%  { transform: translate(15%, -10%); }
+    50%  { transform: translate(20%, 15%); }
+    75%  { transform: translate(-15%, 10%); }
+    100% { transform: translate(-20%, -15%); }
+}
+
+/* Film grain overlay — SVG noise, blended over the scene */
+.ambient-grain {
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    background-size: 200px 200px;
+    opacity: 0.04;
+    mix-blend-mode: overlay;
+    animation: grain-shift 8s steps(8) infinite;
+}
+
+@keyframes grain-shift {
+    0%   { transform: translate(0, 0); }
+    12%  { transform: translate(-5%, -10%); }
+    25%  { transform: translate(-10%, 5%); }
+    37%  { transform: translate(5%, -5%); }
+    50%  { transform: translate(-5%, 10%); }
+    62%  { transform: translate(10%, -5%); }
+    75%  { transform: translate(-10%, -10%); }
+    87%  { transform: translate(5%, 5%); }
+    100% { transform: translate(0, 0); }
+}
+
+/* Respect reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .ambient-glow,
+    .ambient-grain {
+        animation: none;
+    }
+}

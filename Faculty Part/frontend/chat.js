@@ -364,13 +364,6 @@ userInput.addEventListener('keydown', (e) => {
     }
 });
 
-// ── Prompt chips ──────────────────────────────────────────────────────────────
-function usePrompt(el) {
-    userInput.value = el.textContent.trim();
-    userInput.focus();
-    userInput.dispatchEvent(new Event('input'));
-}
-
 // ── New chat (A23: notify backend) ────────────────────────────────────────────
 async function startNewChat() {
     if (currentSessionId) {
@@ -474,4 +467,11 @@ async function copyMessage(contentDiv, button, statusEl) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 initSession();
-userInput.focus(); // A31 equivalent for chat
+
+// Welcome screen reveal animation
+requestAnimationFrame(() => {
+    document.querySelectorAll('.welcome .hero-reveal').forEach((el, i) => {
+        el.style.transitionDelay = (i * 80) + 'ms';
+        el.classList.add('reveal--in');
+    });
+});

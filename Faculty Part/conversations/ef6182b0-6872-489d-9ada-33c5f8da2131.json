@@ -134,8 +134,36 @@
         ],
         "intent": "person_lookup"
       }
+    },
+    {
+      "role": "user",
+      "content": "Tell me more about the Grant Application form",
+      "timestamp": "2026-04-21T12:04:01.316413",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Policy\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"The Seed Grant Application Form (HR-SG-01) is for internal research funding requests. The Publication Incentive Claim Form (HR-PB-01) is for claiming research publication rewards. Both forms are to be submitted through the NMIMS HRMS portal (hrms.nmims.edu). Physical copies may be submitted to the HR Department only when HRMS is unavailable.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T12:04:01.318672",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
     }
   ],
   "created_at": "2026-04-21T06:54:58.125466",
-  "updated_at": "2026-04-21T07:14:14.774981"
+  "updated_at": "2026-04-21T12:04:01.318672"
 }

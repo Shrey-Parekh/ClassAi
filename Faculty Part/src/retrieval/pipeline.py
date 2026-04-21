@@ -102,6 +102,7 @@ class RetrievalPipeline:
                         "intent": understanding.intent,
                         "domain": understanding.domain,
                         "entities": understanding.entities,
+                        "format_preference": understanding.format_preference,
                         "metadata": {
                             "retrieval_path": "direct_metadata_match",
                             "initial_results": len(direct_results),
@@ -220,6 +221,7 @@ class RetrievalPipeline:
             "intent": understanding.intent,
             "domain": understanding.domain,
             "entities": understanding.entities,
+            "format_preference": understanding.format_preference,
             "metadata": {
                 "retrieval_path": "hybrid_search",
                 "initial_results": len(search_results),
@@ -341,6 +343,8 @@ Write only the sentence, nothing else."""
     
     def _generate_no_confidence_response(self, query: str, intent: str) -> Dict[str, Any]:
         """Generate no-confidence response with reformulation suggestions."""
+        from .query_understanding import FormatPreference
+        
         suggestions = []
         
         if intent == "lookup":
@@ -373,6 +377,7 @@ Write only the sentence, nothing else."""
             "intent": intent,
             "domain": "general",
             "entities": [],
+            "format_preference": FormatPreference(),
             "metadata": {
                 "retrieval_path": "no_confidence",
                 "initial_results": 0,

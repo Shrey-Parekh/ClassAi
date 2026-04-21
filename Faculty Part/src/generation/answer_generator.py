@@ -2,7 +2,7 @@
 LLM-based answer generation with structured JSON output.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 import re
@@ -157,7 +157,8 @@ class AnswerGenerator:
         self,
         query: str,
         retrieved_chunks: List[Dict[str, Any]],
-        intent_type: str = "general"
+        intent_type: str = "general",
+        format_preference: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Generate structured JSON answer from query and retrieved chunks.
@@ -166,10 +167,18 @@ class AnswerGenerator:
             query: Original faculty query
             retrieved_chunks: Top-k chunks from retrieval pipeline (sorted by relevance)
             intent_type: Detected intent
+            format_preference: User format preferences (verbosity/structure)
         
         Returns:
             Dict with structured response, sources, and metadata
         """
+        # Import FormatPreference for type checking
+        from ..retrieval.query_understanding import FormatPreference
+        
+        # Default to standard format if not provided
+        if format_preference is None:
+            format_preference = FormatPreference()
+        
         # Select chunks dynamically based on token budget and relevance
         chunks_to_use = self._select_chunks_by_tokens(retrieved_chunks, intent_type)
         
@@ -208,8 +217,29 @@ class AnswerGenerator:
         self.logger.debug(f"Context preview (first 500 chars):\n{context[:500]}")
         self.logger.debug("=== END CONTEXT ===")
         
+        # Build format directive from format_preference
+        format_directive = self._build_format_directive(format_preference)
+        
         # Get JSON prompt for intent
         prompt = get_prompt(intent_type, context, query)
+        
+        # Inject format directive BEFORE intent-specific template
+        if format_directive:
+            # Insert format directive after SHARED_RULES but before CONTEXT
+            prompt = prompt.replace(
+                "CONTEXT:",
+                f"{format_directive}\n\nCONTEXT:"
+            )
+        
+        # Log format detection
+        self.logger.info(
+            "format=%s verbosity=%s structure=%s trigger_v=%r trigger_s=%r",
+            format_preference.structure,
+            format_preference.verbosity,
+            format_preference.structure,
+            format_preference.verbosity_trigger,
+            format_preference.structure_trigger
+        )
         
         self.logger.debug(f"=== PROMPT DIAGNOSTIC ===")
         self.logger.debug(f"Prompt length: {len(prompt)} chars")
@@ -221,6 +251,9 @@ class AnswerGenerator:
         estimated_input_tokens = self._estimate_tokens(prompt)
         context_chars = len(context)
         estimated_context_tokens = self._estimate_tokens(context)
+        
+        # Scale output token budget by verbosity
+        output_tokens = self._get_token_budget(format_preference, self.OUTPUT_TOKENS)
         
         self.logger.debug("=== TOKEN USAGE ESTIMATE ===")
         self.logger.debug(f"Prompt total characters: {prompt_chars}")
@@ -236,7 +269,7 @@ class AnswerGenerator:
         raw_response = self.llm.generate(
             prompt,
             temperature=0.0,
-            max_tokens=self.OUTPUT_TOKENS,
+            max_tokens=output_tokens,
             format="json"
         )
 
@@ -675,3 +708,73 @@ class AnswerGenerator:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
             self.logger.warning(f"Failed to log context usage: {e}")
+    
+    def _build_format_directive(self, fp: Any) -> str:
+        """
+        Build format directive from FormatPreference.
+        
+        Args:
+            fp: FormatPreference object
+        
+        Returns:
+            Format directive string to inject into prompt
+        """
+        parts = []
+        
+        if fp.verbosity == "brief":
+            parts.append(
+                "The user requested a BRIEF answer. Keep the response to 1-2 "
+                "short sections maximum. No preamble. Aim for under 80 words total."
+            )
+        elif fp.verbosity == "detailed":
+            parts.append(
+                "The user requested a DETAILED answer. Provide thorough coverage "
+                "with multiple sections. Include relevant context, examples, and "
+                "edge cases where supported by the retrieved documents."
+            )
+        
+        if fp.structure == "table":
+            parts.append(
+                "The user requested a TABLE. Your response MUST use at least one "
+                "section with type 'table' that directly answers the query. "
+                "Include a paragraph section only if needed to introduce the table."
+            )
+        elif fp.structure == "bullets":
+            parts.append(
+                "The user requested BULLETS. Use a section with type 'bullets' "
+                "as the primary content. Each bullet should be a complete, "
+                "standalone point."
+            )
+        elif fp.structure == "steps":
+            parts.append(
+                "The user requested STEP-BY-STEP guidance. Use a section with "
+                "type 'steps' as the primary content. Each step must be "
+                "actionable and sequenced."
+            )
+        elif fp.structure == "paragraph":
+            parts.append(
+                "The user requested PARAGRAPH form. Use a section with type "
+                "'paragraph'. Avoid bullets, tables, or numbered steps."
+            )
+        
+        if not parts:
+            return ""
+        
+        return "USER FORMAT REQUIREMENTS (must be honored):\n- " + "\n- ".join(parts)
+    
+    def _get_token_budget(self, fp: Any, base: int) -> int:
+        """
+        Scale token budget by verbosity level.
+        
+        Args:
+            fp: FormatPreference object
+            base: Base token budget
+        
+        Returns:
+            Scaled token budget
+        """
+        if fp.verbosity == "brief":
+            return max(256, base // 3)
+        if fp.verbosity == "detailed":
+            return int(base * 1.5)
+        return base

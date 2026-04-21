@@ -8,17 +8,23 @@
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/ambient.css">
 </head>
 <body>
+    <div class="ambient-root" aria-hidden="true">
+        <div class="ambient-glow"></div>
+        <div class="ambient-grain"></div>
+    </div>
     <div class="landing-root">
 
         <!-- Navbar -->
         <nav class="nav-bar">
             <div class="nav-inner">
                 <div class="nav-brand">
-                    <div class="brand-mark">F</div>
+                    <div class="brand-mark">C</div>
                     <span class="brand-name">ClassAI</span>
                 </div>
                 <div class="nav-actions">
@@ -34,44 +40,53 @@
             <section class="hero-section">
                 <div class="hero-inner">
                     <div class="hero-text">
-                        <h1 class="hero-title">Every answer.<br>One place.</h1>
-                        <p class="hero-subtitle">
-                            ClassAI connects you to NMIMS policies, documents, and institutional knowledge — instantly, with verified sources.
+                        <div class="hero-eyebrow hero-reveal">NMIMS INTERNAL KNOWLEDGE ASSISTANT</div>
+                        <h1 class="hero-title hero-reveal">find anything. cite everything</h1>
+                        <p class="hero-subtitle hero-reveal">
+                            ClassAI connects you to NMIMS policies, documents, and institutional knowledge — instantly, with sources linked at the end of every answer.
                         </p>
-                        <div class="hero-actions">
+                        <div class="hero-actions hero-reveal">
                             <a href="/chat" class="btn-primary">Open Assistant</a>
                             <a href="#how-it-works" class="btn-ghost">See how it works</a>
                         </div>
+                        <div class="hero-meta hero-reveal">No setup. Sign in with your NMIMS credentials.</div>
                     </div>
-                    <div class="hero-card" aria-label="Sample conversation">
-                        <div class="hero-card-label">ClassAI</div>
-                        <div class="hero-card-body">
-                            <div class="mock-turn mock-user">
-                                <span class="mock-role">You</span>
-                                <p>What documents do I need for a grade appeal?</p>
-                            </div>
-                            <div class="mock-turn mock-assistant">
-                                <span class="mock-role">ClassAI</span>
-                                <p>You will need Form HR-LA-01 (Leave Application), your attendance record, and a written statement. All forms are available in the Faculty Applications Compendium.</p>
-                            </div>
-                        </div>
-                    </div>
+                    <aside class="hero-sidekick" aria-hidden="true">
+                        <div class="hero-sidekick-label">corpus</div>
+                        <ul class="hero-sidekick-list">
+                            <li>Employee Resource Book</li>
+                            <li>Faculty Academic Guidelines</li>
+                            <li>Faculty Applications Compendium</li>
+                            <li>NMIMS Academic Calendar</li>
+                            <li>HR Policies &amp; Leave Rules</li>
+                            <li>Examination Procedures</li>
+                        </ul>
+                        <div class="hero-sidekick-footer">and 40+ institutional documents</div>
+                    </aside>
+                </div>
+            </section>
+
+            <!-- Pullquote band -->
+            <section class="pullquote-band">
+                <div class="pullquote-inner reveal">
+                    <p class="pullquote">Every answer cites its source. Every claim is verifiable.</p>
+                    <p class="pullquote-attribution">— The rule behind ClassAI</p>
                 </div>
             </section>
 
             <!-- Role strip -->
             <div class="role-strip">
-                <div class="role-strip-col">
+                <div class="role-strip-col reveal">
                     <span class="role-strip-title">Students</span>
                     <span class="role-strip-desc">Syllabi · Question papers · Course resources</span>
                 </div>
                 <div class="role-strip-divider"></div>
-                <div class="role-strip-col">
+                <div class="role-strip-col reveal">
                     <span class="role-strip-title">Faculty</span>
                     <span class="role-strip-desc">Forms · HR policies · Eligibility rules</span>
                 </div>
                 <div class="role-strip-divider"></div>
-                <div class="role-strip-col">
+                <div class="role-strip-col reveal">
                     <span class="role-strip-title">Everyone</span>
                     <span class="role-strip-desc">Campus navigation · Document search</span>
                 </div>
@@ -80,36 +95,88 @@
             <!-- Feature block -->
             <section class="feature-block" id="how-it-works">
                 <div class="feature-inner">
+                    <div class="section-header reveal">
+                        <span class="section-number">01</span>
+                        <span class="section-title">What it does</span>
+                    </div>
                     <div class="feature-list">
-                        <div class="feature-item">
-                            <h3 class="feature-title">Policy lookup</h3>
-                            <p class="feature-desc">Find leave rules, exam guidelines, and institutional procedures.</p>
+                        <div class="feature-item reveal">
+                            <span class="feature-num">01</span>
+                            <div class="feature-body">
+                                <h3 class="feature-title">Policy lookup</h3>
+                                <p class="feature-desc">Find leave rules, exam guidelines, and institutional procedures.</p>
+                            </div>
                         </div>
-                        <div class="feature-item">
-                            <h3 class="feature-title">Document access</h3>
-                            <p class="feature-desc">Locate forms, agreements, and official compendium entries.</p>
+                        <div class="feature-item reveal">
+                            <span class="feature-num">02</span>
+                            <div class="feature-body">
+                                <h3 class="feature-title">Document access</h3>
+                                <p class="feature-desc">Locate forms, agreements, and official compendium entries.</p>
+                            </div>
                         </div>
-                        <div class="feature-item">
-                            <h3 class="feature-title">Quick answers</h3>
-                            <p class="feature-desc">Ask in plain language. Get answers with document references.</p>
+                        <div class="feature-item reveal">
+                            <span class="feature-num">03</span>
+                            <div class="feature-body">
+                                <h3 class="feature-title">Quick answers</h3>
+                                <p class="feature-desc">Ask in plain language. Get answers with document references.</p>
+                            </div>
                         </div>
                     </div>
                     <div class="access-list">
-                        <div class="access-item">
-                            <span class="access-label">Syllabus lookup</span>
-                            <span class="access-desc">Find the course structure and reading list for any subject.</span>
+                        <div class="access-item reveal">
+                            <span class="feature-num">04</span>
+                            <div class="feature-body">
+                                <span class="access-label">Syllabus lookup</span>
+                                <span class="access-desc">Find the course structure and reading list for any subject.</span>
+                            </div>
                         </div>
-                        <div class="access-item">
-                            <span class="access-label">Form guidance</span>
-                            <span class="access-desc">Understand which forms to fill, how to fill them, and where to submit.</span>
+                        <div class="access-item reveal">
+                            <span class="feature-num">05</span>
+                            <div class="feature-body">
+                                <span class="access-label">Form guidance</span>
+                                <span class="access-desc">Understand which forms to fill, how to fill them, and where to submit.</span>
+                            </div>
                         </div>
-                        <div class="access-item">
-                            <span class="access-label">Policy search</span>
-                            <span class="access-desc">Query leave rules, exam policies, and institutional procedures.</span>
+                        <div class="access-item reveal">
+                            <span class="feature-num">06</span>
+                            <div class="feature-body">
+                                <span class="access-label">Policy search</span>
+                                <span class="access-desc">Query leave rules, exam policies, and institutional procedures.</span>
+                            </div>
                         </div>
-                        <div class="access-item">
-                            <span class="access-label">Classroom directions</span>
-                            <span class="access-desc">Get step-by-step navigation to any room from your current location.</span>
+                        <div class="access-item reveal">
+                            <span class="feature-num">07</span>
+                            <div class="feature-body">
+                                <span class="access-label">Classroom directions</span>
+                                <span class="access-desc">Get step-by-step navigation to any room from your current location.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- How it works -->
+            <section class="how-block">
+                <div class="how-inner">
+                    <div class="section-header reveal">
+                        <span class="section-number">02</span>
+                        <span class="section-title">How it works</span>
+                    </div>
+                    <div class="how-steps">
+                        <div class="how-step reveal">
+                            <div class="how-step-num">Step 01</div>
+                            <h3 class="how-step-title">Ask in plain language</h3>
+                            <p class="how-step-desc">No syntax, no keywords. Phrase your question as you would to a colleague.</p>
+                        </div>
+                        <div class="how-step reveal">
+                            <div class="how-step-num">Step 02</div>
+                            <h3 class="how-step-title">Semantic + keyword search</h3>
+                            <p class="how-step-desc">The assistant searches every indexed document — both by meaning and by exact phrasing.</p>
+                        </div>
+                        <div class="how-step reveal">
+                            <div class="how-step-num">Step 03</div>
+                            <h3 class="how-step-title">Answer with sources</h3>
+                            <p class="how-step-desc">Every response lists the documents and page numbers it was drawn from. Verifiable by design.</p>
                         </div>
                     </div>
                 </div>
@@ -120,8 +187,23 @@
         <!-- Footer -->
         <footer class="landing-footer">
             <div class="footer-inner">
-                <span class="footer-left">ClassAI — NMIMS Internal Tool</span>
-                <span class="footer-right" id="footerYear"></span>
+                <div class="footer-col">
+                    <div class="footer-brand">ClassAI</div>
+                    <div class="footer-muted">NMIMS Internal Tool</div>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-label">Product</div>
+                    <a href="/chat" class="footer-link">Open Assistant</a>
+                    <a href="/signin" class="footer-link">Sign in</a>
+                </div>
+                <div class="footer-col">
+                    <div class="footer-label">Scope</div>
+                    <span class="footer-muted">Faculty · Staff · Students</span>
+                    <span class="footer-muted">NMIMS Mumbai</span>
+                </div>
+                <div class="footer-col footer-col--end">
+                    <span class="footer-muted" id="footerYear"></span>
+                </div>
             </div>
         </footer>
 
@@ -129,6 +211,28 @@
 
     <script>
         document.getElementById('footerYear').textContent = new Date().getFullYear();
+        
+        // Intersection observer for scroll reveals
+        (function() {
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('reveal--in');
+                        observer.unobserve(entry.target);
+                    }
+                });
+            }, { threshold: 0.15, rootMargin: '0px 0px -80px 0px' });
+            
+            document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+            
+            // Hero runs on load (not scroll)
+            requestAnimationFrame(() => {
+                document.querySelectorAll('.hero-reveal').forEach((el, i) => {
+                    el.style.transitionDelay = (i * 80) + 'ms';
+                    el.classList.add('reveal--in');
+                });
+            });
+        })();
     </script>
 </body>
 </html>

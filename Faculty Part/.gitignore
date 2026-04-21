@@ -44,10 +44,28 @@ data/processed/*
 # Logs
 *.log
 logs/
+data/logs/
+embedding_log.jsonl
 
-# Vector DB
+# Vector DB & Indexes
 qdrant_storage/
+bm25_index/
+
+# Cache & Sessions
+cache/
+conversations/
 
 # OS
 .DS_Store
 Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~.nib

@@ -2,9 +2,24 @@
 Enhanced query understanding with intent, domain, and entity detection.
 """
 
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
+from typing import Dict, Any, List, Optional, Literal
+from dataclasses import dataclass, field
 import re
+
+
+# Format preference type aliases
+VerbosityLevel = Literal["brief", "standard", "detailed"]
+StructureHint = Literal["auto", "paragraph", "bullets", "steps", "table"]
+
+
+@dataclass
+class FormatPreference:
+    """User-specified output formatting derived from query text."""
+    verbosity: VerbosityLevel = "standard"
+    structure: StructureHint = "auto"
+    # Which raw phrase triggered each decision — for logging/debugging only
+    verbosity_trigger: Optional[str] = None
+    structure_trigger: Optional[str] = None
 
 
 @dataclass
@@ -16,6 +31,7 @@ class QueryUnderstanding:
     is_current_only: bool  # Whether to filter for current/active documents
     metadata_filters: Dict[str, Any]  # Filters to apply
     expanded_query: str  # Query with added terms for better retrieval
+    format_preference: FormatPreference = field(default_factory=FormatPreference)
 
 
 class QueryAnalyzer:
@@ -27,6 +43,38 @@ class QueryAnalyzer:
     
     def __init__(self):
         """Initialize query analyzer with comprehensive patterns."""
+        
+        # Format detection patterns (defined once, reused)
+        self.VERBOSITY_BRIEF = [
+            r"\b(in\s+short|tl;?dr|briefly|in\s+brief|one[\s-]line|short\s+answer|"
+            r"quick\s+answer|just\s+the\s+(gist|basics|key\s+points?)|summari[sz]e|"
+            r"summary|concise(ly)?)\b",
+        ]
+        
+        self.VERBOSITY_DETAILED = [
+            r"\b(in\s+detail|detailed|thorough(ly)?|comprehensive(ly)?|"
+            r"explain\s+(fully|thoroughly|in\s+depth)|elaborate|expand|long\s+answer|"
+            r"deep\s+dive|full\s+explanation)\b",
+        ]
+        
+        self.STRUCTURE_TABLE = [
+            r"\b(in\s+a?\s*table|tabular|as\s+a\s+table|table\s+format|in\s+rows)\b",
+        ]
+        
+        self.STRUCTURE_BULLETS = [
+            r"\b(in\s+bullets?|bullet\s+points?|as\s+bullets?|bulleted|"
+            r"as\s+a\s+(bulleted\s+)?list|point\s+wise|point[\s-]by[\s-]point)\b",
+        ]
+        
+        self.STRUCTURE_STEPS = [
+            r"\b(step[\s-]by[\s-]step|as\s+steps?|in\s+steps?|list\s+the\s+steps?|numbered\s+(list|steps)|"
+            r"walk\s+me\s+through|procedure|how[\s-]to\s+steps?)\b",
+        ]
+        
+        self.STRUCTURE_PARAGRAPH = [
+            r"\b(in\s+a?\s*paragraph|as\s+a\s+paragraph|in\s+prose|in\s+sentences|"
+            r"narrative\s+form)\b",
+        ]
         
         # Intent patterns - expanded with synonyms and variations
         self.intent_patterns = {
@@ -267,13 +315,17 @@ class QueryAnalyzer:
         # Expand query with synonyms and context
         expanded_query = self._expand_query(query_normalized, intent, entities)
         
+        # Detect format preference
+        format_preference = self._detect_format(query_lower)
+        
         return QueryUnderstanding(
             intent=intent,
             domain=domain,
             entities=entities,
             is_current_only=is_current_only,
             metadata_filters=metadata_filters,
-            expanded_query=expanded_query
+            expanded_query=expanded_query,
+            format_preference=format_preference
         )
     
     def _detect_document_scope_query(self, query: str) -> Optional[QueryUnderstanding]:
@@ -788,3 +840,51 @@ class QueryAnalyzer:
         # This can be expanded based on your metadata schema
 
         return filters
+    
+    def _detect_format(self, query: str) -> FormatPreference:
+        """
+        Detect user format preferences from query text.
+        
+        Looks for verbosity cues (brief/detailed) and structure hints
+        (table/bullets/steps/paragraph).
+        
+        Args:
+            query: Lowercased query text
+        
+        Returns:
+            FormatPreference with detected verbosity and structure
+        """
+        pref = FormatPreference()
+        
+        # Verbosity — detailed wins over brief if both present (user usually means it)
+        for pat in self.VERBOSITY_DETAILED:
+            m = re.search(pat, query, re.IGNORECASE)
+            if m:
+                pref.verbosity = "detailed"
+                pref.verbosity_trigger = m.group(0)
+                break
+        else:
+            for pat in self.VERBOSITY_BRIEF:
+                m = re.search(pat, query, re.IGNORECASE)
+                if m:
+                    pref.verbosity = "brief"
+                    pref.verbosity_trigger = m.group(0)
+                    break
+        
+        # Structure — most-specific wins: table > steps > bullets > paragraph
+        for label, patterns in [
+            ("table", self.STRUCTURE_TABLE),
+            ("steps", self.STRUCTURE_STEPS),
+            ("bullets", self.STRUCTURE_BULLETS),
+            ("paragraph", self.STRUCTURE_PARAGRAPH),
+        ]:
+            for pat in patterns:
+                m = re.search(pat, query, re.IGNORECASE)
+                if m:
+                    pref.structure = label  # type: ignore
+                    pref.structure_trigger = m.group(0)
+                    break
+            if pref.structure != "auto":
+                break
+        
+        return pref

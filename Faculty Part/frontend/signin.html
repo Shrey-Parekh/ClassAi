@@ -4,25 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' http://localhost:8001;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com 'unsafe-inline'; font-src https://cdn.fontshare.com; img-src 'self' data:; connect-src 'self' http://localhost:8001 https://unpkg.com;">
     <title>Sign In · ClassAI</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/signin.css">
-    <!-- A41: pinned version -->
-    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" 
-            integrity="sha384-6PgFXMZ8Ub8RvVJLJsL8qFqXqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqL" 
-            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/static/ambient.css">
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="signin-body">
+    <div class="ambient-root" aria-hidden="true">
+        <div class="ambient-glow"></div>
+        <div class="ambient-grain"></div>
+    </div>
     <!-- A39: main landmark -->
     <main>
     <div class="signin-shell">
         <div class="signin-card">
             <div class="signin-logo">
-                <div class="product-initial">F</div>
+                <div class="product-initial">C</div>
                 <div class="product-labels">
                     <span class="product-name">ClassAI</span>
                     <span class="product-meta">NMIMS</span>
@@ -37,7 +40,6 @@
             <form id="signinForm" autocomplete="off" novalidate>
                 <div class="signin-field">
                     <label class="signin-label" for="emailInput">Email</label>
-                    <!-- A31: autofocus -->
                     <input
                         id="emailInput"
                         class="signin-input"
@@ -45,7 +47,6 @@
                         placeholder="you@nmims.edu"
                         autocomplete="email"
                         required
-                        autofocus
                     />
                 </div>
 

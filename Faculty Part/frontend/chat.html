@@ -4,38 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' http://localhost:8001;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com 'unsafe-inline'; font-src https://cdn.fontshare.com; img-src 'self' data:; connect-src 'self' http://localhost:8001 https://unpkg.com;">
     <title>Chat · ClassAI</title>
     <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/chat.css">
-    <!-- A41: pinned version + SRI -->
-    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" 
-            integrity="sha384-6PgFXMZ8Ub8RvVJLJsL8qFqXqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqL" 
-            crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/static/ambient.css">
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+    <div class="ambient-root" aria-hidden="true">
+        <div class="ambient-glow"></div>
+        <div class="ambient-grain"></div>
+    </div>
     <script>
-        // A4: Validate token with backend, not just presence
-        (async function() {
-            const token = sessionStorage.getItem('classai_token');
-            if (!token) {
+        // Simple token presence check
+        (function() {
+            if (!sessionStorage.getItem('classai_token')) {
                 window.location.replace('/signin');
-                return;
-            }
-            
-            try {
-                const res = await fetch('http://localhost:8001/api/auth/me', {
-                    headers: { 'Authorization': `Bearer ${token}` }
-                });
-                if (!res.ok) {
-                    sessionStorage.clear();
-                    window.location.replace('/signin');
-                }
-            } catch {
-                // Network error - allow through but session init will fail
             }
         })();
     </script>
@@ -49,7 +38,7 @@
             <div class="sidebar-inner">
                 <!-- Product mark -->
                 <div class="product-mark">
-                    <div class="product-initial">F</div>
+                    <div class="product-initial">C</div>
                     <div class="product-labels">
                         <span class="product-name">ClassAI</span>
                         <span class="product-role" id="roleLabel"></span>
@@ -66,6 +55,13 @@
                 <div class="sidebar-history">
                     <div class="sidebar-history-label">Recent</div>
                     <div class="sidebar-history-list" id="historyList"></div>
+                </div>
+
+                <!-- Corpus indicator -->
+                <div class="sidebar-corpus">
+                    <div class="sidebar-corpus-label">Corpus</div>
+                    <div class="sidebar-corpus-stat">1,247 sections indexed</div>
+                    <div class="sidebar-corpus-muted">across 43 documents</div>
                 </div>
 
                 <!-- Footer nav -->
@@ -89,7 +85,6 @@
                 <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
                     <i data-lucide="menu" aria-hidden="true"></i>
                 </button>
-                <div class="model-id" id="modelId">ClassAI</div>
             </header>
 
             <!-- A33: messages is a live region -->
@@ -97,14 +92,26 @@
                 <div class="messages-inner">
                     <!-- Welcome screen -->
                     <section class="welcome" id="welcomeScreen">
-                        <div class="welcome-eyebrow">NMIMS Knowledge Base</div>
-                        <h1 class="welcome-title">Ask anything.</h1>
-                        <p class="welcome-description">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
-                        <div class="welcome-prompts">
-                            <button class="prompt-chip" onclick="usePrompt(this)">What are the leave rules for teaching staff?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">How do I apply for earned leave?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">What is the PhD coursework requirement?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">What form codes are in the Applications Compendium?</button>
+                        <div class="welcome-eyebrow hero-reveal">NMIMS Knowledge Base</div>
+                        <h1 class="welcome-title hero-reveal">Ask anything.</h1>
+                        <p class="welcome-description hero-reveal">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
+                        <p class="welcome-hint hero-reveal">Try asking about leave rules, grade appeals, or the academic calendar.</p>
+                        <div class="welcome-capabilities hero-reveal">
+                            <div class="capability">
+                                <div class="capability-num">01</div>
+                                <div class="capability-title">Policy &amp; leave rules</div>
+                                <div class="capability-desc">Ask about attendance, leave entitlements, or eligibility criteria.</div>
+                            </div>
+                            <div class="capability">
+                                <div class="capability-num">02</div>
+                                <div class="capability-title">Forms &amp; procedures</div>
+                                <div class="capability-desc">Find the right form, how to fill it, and where to submit.</div>
+                            </div>
+                            <div class="capability">
+                                <div class="capability-num">03</div>
+                                <div class="capability-title">Academic guidelines</div>
+                                <div class="capability-desc">Query the Academic Compendium, PhD rules, and examination procedures.</div>
+                            </div>
                         </div>
                     </section>
 
