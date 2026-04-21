@@ -1,17 +1,11 @@
 /**
- * Structured response renderer for JSON-based LLM outputs.
- * 
- * Renders each section type with dedicated formatting.
+ * Structured response renderer.
+ * Uses document.createElement + textContent throughout — no innerHTML, no XSS.
+ * A1: this file must be loaded before chat.js in chat.html.
  */
 
 class ResponseRenderer {
-    /**
-     * Render a complete structured response.
-     * @param {Object} structured - StructuredResponse object
-     * @returns {HTMLElement} Rendered container
-     */
     render(structured) {
-        // Handle fallback
         if (structured.confidence === "none" || structured.fallback) {
             return this.renderFallback(structured.fallback);
         }
@@ -19,136 +13,123 @@ class ResponseRenderer {
         const container = document.createElement("div");
         container.className = "response-container";
 
-        // Title
         if (structured.title) {
-            const title = document.createElement("h2");
-            title.className = "response-title";
-            title.textContent = structured.title;
-            container.appendChild(title);
+            const h = document.createElement("h2");
+            h.className = "response-title";
+            h.textContent = structured.title;
+            container.appendChild(h);
         }
 
-        // Subtitle
         if (structured.subtitle) {
-            const subtitle = document.createElement("p");
-            subtitle.className = "response-subtitle";
-            subtitle.textContent = structured.subtitle;
-            container.appendChild(subtitle);
+            const p = document.createElement("p");
+            p.className = "response-subtitle";
+            p.textContent = structured.subtitle;
+            container.appendChild(p);
         }
 
-        // Sections
-        structured.sections.forEach(section => {
+        (structured.sections || []).forEach(section => {
             container.appendChild(this.renderSection(section));
         });
 
-        // Footer
         if (structured.footer) {
-            const footer = document.createElement("p");
-            footer.className = "response-footer";
-            footer.textContent = structured.footer;
-            container.appendChild(footer);
+            const p = document.createElement("p");
+            p.className = "response-footer";
+            p.textContent = structured.footer;
+            container.appendChild(p);
         }
 
         return container;
     }
 
-    /**
-     * Render a section based on its type.
-     */
     renderSection(section) {
-        switch(section.type) {
+        switch (section.type) {
             case "paragraph": return this.renderParagraph(section);
             case "bullets":   return this.renderBullets(section);
             case "steps":     return this.renderSteps(section);
             case "table":     return this.renderTable(section);
             case "alert":     return this.renderAlert(section);
-            default:          return this.renderParagraph(section);
+            default: return this.renderUnknown(section);
         }
     }
 
-    /**
-     * Render paragraph section.
-     */
     renderParagraph(section) {
         const div = document.createElement("div");
-        div.className = "section-paragraph";
-
+        div.className = "response-section section-paragraph";
         if (section.heading) {
             const h = document.createElement("h3");
+            h.className = "section-heading";
             h.textContent = section.heading;
             div.appendChild(h);
         }
-
         const p = document.createElement("p");
-        p.textContent = section.content;
+        const text = section.content || "";
+        text.split("\n").forEach((line, i, arr) => {
+            p.appendChild(document.createTextNode(line));
+            if (i < arr.length - 1) p.appendChild(document.createElement("br"));
+        });
         div.appendChild(p);
-        
         return div;
     }
 
-    /**
-     * Render bullet list section.
-     */
     renderBullets(section) {
         const div = document.createElement("div");
-        div.className = "section-bullets";
-
+        div.className = "response-section section-bullets";
         if (section.heading) {
             const h = document.createElement("h3");
+            h.className = "section-heading";
             h.textContent = section.heading;
             div.appendChild(h);
         }
-
         const ul = document.createElement("ul");
-        section.items.forEach(item => {
+        (section.items || []).forEach(item => {
             const li = document.createElement("li");
             li.textContent = item;
             ul.appendChild(li);
         });
         div.appendChild(ul);
-        
         return div;
     }
 
-    /**
-     * Render numbered steps section.
-     */
     renderSteps(section) {
         const div = document.createElement("div");
-        div.className = "section-steps";
-
+        div.className = "response-section section-steps";
         if (section.heading) {
             const h = document.createElement("h3");
+            h.className = "section-heading";
             h.textContent = section.heading;
             div.appendChild(h);
         }
-
         const ol = document.createElement("ol");
-        section.items.forEach(item => {
+        (section.items || []).forEach(item => {
             const li = document.createElement("li");
             li.textContent = item;
             ol.appendChild(li);
         });
         div.appendChild(ol);
-        
         return div;
     }
 
-    /**
-     * Render table section.
-     */
     renderTable(section) {
         const div = document.createElement("div");
-        div.className = "section-table";
-
+        div.className = "response-section section-table";
         if (section.heading) {
             const h = document.createElement("h3");
+            h.className = "section-heading";
             h.textContent = section.heading;
             div.appendChild(h);
         }
+        
+        if (!section.headers || !section.headers.length || !section.rows || !section.rows.length) {
+            const p = document.createElement("p");
+            p.textContent = "(Empty table)";
+            p.style.color = "#6b7280";
+            p.style.fontStyle = "italic";
+            div.appendChild(p);
+            return div;
+        }
 
         const table = document.createElement("table");
-        
-        // Header
+
         const thead = document.createElement("thead");
         const headerRow = document.createElement("tr");
         section.headers.forEach(header => {
@@ -158,13 +139,12 @@ class ResponseRenderer {
         });
         thead.appendChild(headerRow);
 
-        // Body
         const tbody = document.createElement("tbody");
         section.rows.forEach(row => {
             const tr = document.createElement("tr");
             row.forEach(cell => {
                 const td = document.createElement("td");
-                td.textContent = cell;
+                td.textContent = cell ?? "";
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -173,33 +153,35 @@ class ResponseRenderer {
         table.appendChild(thead);
         table.appendChild(tbody);
         div.appendChild(table);
-        
         return div;
     }
 
-    /**
-     * Render alert/warning section.
-     */
     renderAlert(section) {
         const div = document.createElement("div");
-        div.className = `section-alert alert-${section.severity}`;
-
+        const sev = section.severity || "info";
+        div.className = `response-section section-alert alert-${sev}`;
         if (section.heading) {
             const h = document.createElement("h3");
+            h.className = "section-heading";
             h.textContent = section.heading;
             div.appendChild(h);
         }
-
         const p = document.createElement("p");
-        p.textContent = section.content;
+        p.textContent = section.content || "";
         div.appendChild(p);
-        
         return div;
     }
 
-    /**
-     * Render fallback message.
-     */
+    renderUnknown(section) {
+        const div = document.createElement("div");
+        div.className = "response-section section-unknown";
+        const pre = document.createElement("pre");
+        pre.style.cssText = "background:#1a1a1a;padding:1rem;border-radius:8px;overflow-x:auto;font-size:0.8rem;color:#9ca3af;";
+        pre.textContent = JSON.stringify(section, null, 2);
+        div.appendChild(pre);
+        return div;
+    }
+
     renderFallback(message) {
         const div = document.createElement("div");
         div.className = "response-fallback";
@@ -208,5 +190,4 @@ class ResponseRenderer {
     }
 }
 
-// Export renderer instance
 const renderer = new ResponseRenderer();

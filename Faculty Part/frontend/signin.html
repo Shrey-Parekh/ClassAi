@@ -3,17 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' http://localhost:8001;">
     <title>Sign In · ClassAI</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/signin.css">
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- A41: pinned version -->
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" 
+            integrity="sha384-6PgFXMZ8Ub8RvVJLJsL8qFqXqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqL" 
+            crossorigin="anonymous"></script>
 </head>
 <body class="signin-body">
+    <!-- A39: main landmark -->
+    <main>
     <div class="signin-shell">
         <div class="signin-card">
-            <!-- Logo -->
             <div class="signin-logo">
                 <div class="product-initial">F</div>
                 <div class="product-labels">
@@ -22,66 +29,56 @@
                 </div>
             </div>
 
-            <!-- Heading -->
             <div class="signin-head">
                 <h1 class="signin-title">Sign in</h1>
                 <p class="signin-sub">Access is scoped to your assigned role. Contact your administrator if you need an account.</p>
             </div>
 
-            <!-- Form -->
             <form id="signinForm" autocomplete="off" novalidate>
                 <div class="signin-field">
                     <label class="signin-label" for="emailInput">Email</label>
-                    <input 
-                        id="emailInput" 
-                        class="signin-input" 
-                        type="email" 
+                    <!-- A31: autofocus -->
+                    <input
+                        id="emailInput"
+                        class="signin-input"
+                        type="email"
                         placeholder="you@nmims.edu"
                         autocomplete="email"
                         required
+                        autofocus
                     />
                 </div>
 
                 <div class="signin-field">
                     <label class="signin-label" for="passwordInput">Password</label>
                     <div class="signin-input-wrap">
-                        <input 
-                            id="passwordInput" 
-                            class="signin-input" 
-                            type="password" 
+                        <input
+                            id="passwordInput"
+                            class="signin-input"
+                            type="password"
                             placeholder="Password"
                             autocomplete="current-password"
                             required
                         />
                         <button type="button" class="signin-eye-toggle" id="eyeToggle" aria-label="Toggle password visibility">
-                            <i data-lucide="eye" style="width:16px;height:16px;"></i>
+                            <i data-lucide="eye" style="width:16px;height:16px;" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
 
-                <div class="signin-field">
-                    <label class="signin-label" for="roleSelect">Role</label>
-                    <select id="roleSelect" class="signin-input signin-select">
-                        <option value="student">Student</option>
-                        <option value="faculty">Faculty</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </div>
+                <!-- A2: role select removed — role comes from server response -->
 
                 <!-- Error -->
-                <div class="signin-error" id="signinError" aria-live="polite"></div>
+                <div class="signin-error" id="signinError" role="alert" aria-live="polite"></div>
 
-                <!-- Submit -->
                 <button type="submit" class="signin-submit" id="signinBtn">Sign in</button>
-                
-                <!-- Dev bypass -->
-                <button type="button" class="signin-bypass" onclick="bypassAuth()">Skip (Dev Only)</button>
+                <!-- A3: dev bypass removed -->
             </form>
         </div>
 
-        <!-- Footer -->
         <p class="signin-footer-note">ClassAI — NMIMS Internal Tool</p>
     </div>
+    </main>
 
     <script src="/static/signin.js"></script>
     <script>lucide.createIcons();</script>

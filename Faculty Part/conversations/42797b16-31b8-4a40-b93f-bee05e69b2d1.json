@@ -1,0 +1,63 @@
+{
+  "session_id": "42797b16-31b8-4a40-b93f-bee05e69b2d1",
+  "messages": [
+    {
+      "role": "user",
+      "content": "What form codes are in the application compendium",
+      "timestamp": "2026-04-21T06:47:10.671411",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Policy\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"The following form codes are listed in the application compendium: HR-LA-01, HR-CO-01, HR-TE-02, HR-CR-01, HR-SG-01, HR-PB-01.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T06:47:10.672412",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Tell me More about the guidlines about the attendance systems",
+      "timestamp": "2026-04-21T06:49:35.218406",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Attendance Policy Enforcement\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"Faculty are responsible for recording attendance for every session they conduct through the NMIMS Attendance Management System (AMS). Attendance must be updated within 30 minutes of the end of each class. At the end of the semester, faculty must certify the final attendance records for their courses; identify students who have fallen below the '75% attendance threshold for debarment from examinations'; and submit the debarment list to the Examination Controller at least 10 days before the examination date.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T06:49:35.219999",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-04-21T06:47:10.671411",
+  "updated_at": "2026-04-21T06:49:35.219999"
+}

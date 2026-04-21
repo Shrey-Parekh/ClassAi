@@ -1,0 +1,119 @@
+{
+  "session_id": "ef6182b0-6872-489d-9ada-33c5f8da2131",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me more about the Academic Teaching Guidelines",
+      "timestamp": "2026-04-21T06:54:58.125466",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Academic Guidelines Overview\", \"subtitle\": null, \"sections\": [{\"heading\": \"Purpose and Scope\", \"type\": \"paragraph\", \"content\": \"These Faculty Academic Guidelines establish standards, expectations, norms, and procedures governing the academic, professional, and ethical conduct of all faculty members at NMIMS. They apply to full-time regular faculty, contractual faculty, visiting and adjunct faculty, and Professors of Practice.\"}, {\"heading\": \"Teaching Standards & Obligations\", \"type\": \"paragraph\", \"content\": \"Faculty are responsible for completing 100% of the prescribed syllabus by the end of the semester. Deviations require prior approval from the Programme Director and must be compensated with equivalent academic content. A Syllabus Completion Report must be submitted to the Department Head within 3 working days of the last lecture.\"}, {\"heading\": \"Lesson Plan Submission\", \"type\": \"paragraph\", \"content\": \"Every faculty member assigned a course must submit a detailed Lesson Plan to the Department Head at least ONE WEEK before the commencement of each semester. The Lesson Plan must include session-wise mapping of topics, proposed teaching methodology, list of textbooks and chapters, digital resources, assessment methods, and planned industry interaction sessions.\"}, {\"heading\": \"Classroom Conduct\", \"type\": \"bullets\", \"items\": [\"Faculty must arrive at the classroom at least 5 minutes before the scheduled start time.\", \"Personal mobile phones must be on silent mode during class.\", \"The use of personal social media or unrelated browsing during class is prohibited.\", \"Faculty must not demean, humiliate, or discriminate against any student.\", \"Differences of opinion between faculty and students must be handled with respect.\"]}, {\"heading\": \"Class Cancellation Protocol\", \"type\": \"steps\", \"items\": [\"Prior written/email approval from the Department Head is mandatory.\", \"A makeup class must be scheduled and conducted within the same week.\", \"Students must be informed of the cancellation and makeup via the LMS at least 2 hours in advance.\", \"Class cancellation without approval more than twice in a semester will result in a formal warning.\"]}, {\"heading\": \"Technology Usage\", \"type\": \"paragraph\", \"content\": \"Faculty must upload all course materials (presentations, reading lists, assignments) on the LMS (Moodle) within 24 hours of each session. AI-assisted teaching tools may be used, but all AI-generated content must be verified for accuracy before use.\"}, {\"heading\": \"Academic Workload\", \"type\": \"table\", \"caption\": null, \"headers\": [\"Designation\", \"Minimum Teaching Hours per Week\", \"Maximum Teaching Hours per Week\"], \"rows\": [[\"Professor\", \"12 contact hours\", \"16 contact hours\"], [\"Associate Professor\", \"14 contact hours\", \"18 contact hours\"], [\"Assistant Professor\", \"16 contact hours\", \"20 contact hours\"], [\"Visiting Faculty\", \"As per engagement letter\", \"As per engagement letter\"]]}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T06:54:58.125466",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Give me the Leave Application Form details and Format",
+      "timestamp": "2026-04-21T07:04:49.269087",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Response Error\", \"subtitle\": null, \"sections\": [], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"none\", \"fallback\": \"I was unable to format a response properly. Please rephrase your question or contact HR directly.\", \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T07:04:49.269087",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "tell me more about the statutory benefits mentioned",
+      "timestamp": "2026-04-21T07:07:53.299876",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Statutory Benefits\", \"subtitle\": null, \"sections\": [{\"heading\": \"Provident Fund (PF)\", \"type\": \"paragraph\", \"content\": \"12% of Basic Pay + DA is contributed by the employee and deducted from salary. NMIMS contributes 12% of Basic Pay as employer contribution. NMIMS is registered with EPFO, and a PF Universal Account Number (UAN) is issued at joining. Withdrawal is governed by EPF & MP Act 1952; partial withdrawal is permitted for specified purposes.\"}, {\"heading\": \"Income Tax\", \"type\": \"paragraph\", \"content\": \"Tax Deducted at Source (TDS) is deducted as per applicable Income Tax slabs under the Income Tax Act 1961. Faculty must submit Form 12BB declaring investments and deductions claimed at the beginning of each financial year. Form 16 is issued by the institution by June 15th every year for the preceding financial year.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T07:07:53.300876",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "tell me more about the academic guidelines",
+      "timestamp": "2026-04-21T07:11:17.573779",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Academic Guidelines Overview\", \"subtitle\": null, \"sections\": [{\"heading\": \"Purpose\", \"type\": \"paragraph\", \"content\": \"The Faculty Academic Guidelines establish standards, expectations, norms, and procedures governing the academic, professional, and ethical conduct of all faculty members at Narsee Monjee Institute of Management Studies (NMIMS). They are designed to ensure consistency, transparency, and excellence across all schools, departments, and campuses.\"}, {\"heading\": \"Scope\", \"type\": \"bullets\", \"items\": [\"All full-time regular faculty, regardless of designation or years of service.\", \"All contractual faculty for the duration of their contract.\", \"All visiting and adjunct faculty for the duration of their engagement.\", \"All Professors of Practice appointed under the NMIMS academic framework.\"]}, {\"heading\": \"Governing Authority\", \"type\": \"paragraph\", \"content\": \"These Guidelines are issued under the authority of the Academic Council of NMIMS and approved by the Board of Management. They are consistent with UGC Regulations on Minimum Qualifications for Appointment of Teachers, 2018; AICTE guidelines (where applicable); Bar Council of India / Medical Council of India norms (for respective schools); National Assessment and Accreditation Council (NAAC) quality standards; and National Institutional Ranking Framework (NIRF) parameters.\"}, {\"heading\": \"Revision\", \"type\": \"paragraph\", \"content\": \"The Office of the Dean (Academic Affairs) shall review these Guidelines annually and issue updates as necessary. Faculty will be notified of changes through official email and the NMIMS intranet.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Academic Guidelines\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T07:11:17.574807",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "academic_guidelines_2024",
+            "title": "NMIMS Faculty Academic Guidelines",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-04-21T06:54:58.125466",
+  "updated_at": "2026-04-21T07:11:17.574807"
+}

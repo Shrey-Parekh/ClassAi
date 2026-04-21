@@ -300,6 +300,10 @@ body {
     padding: 0 3rem;
 }
 
+.message.assistant .message-content {
+    max-width: 70ch;
+}
+
 /* Welcome */
 .welcome {
     display: flex;
@@ -541,7 +545,20 @@ body {
 
 .section-paragraph {
     margin: 0.5rem 0;
+}
+
+.section-paragraph p {
     line-height: 1.7;
+    white-space: pre-wrap;
+}
+
+.section-heading {
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.response-section:first-child .section-heading {
+    margin-top: 0;
 }
 
 .section-bullets,
@@ -602,6 +619,7 @@ body {
 .section-table {
     margin: 0.75rem 0;
     overflow-x: auto;
+    max-width: 100%;
 }
 
 .section-table table {
@@ -755,6 +773,17 @@ body {
     transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
+.confidence-warning {
+    padding: 0.625rem 1rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    border-radius: 8px;
+    color: #fbbf24;
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+    font-weight: 500;
+}
+
 .citation-block.visible {
     opacity: 1;
     transform: translateY(0);
@@ -762,7 +791,42 @@ body {
 
 .citation-prefix {
     color: var(--accent);
-    font-weight: 500;
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.5rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.citation-list {
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0 0;
+}
+
+.citation-list li {
+    font-size: 0.78rem;
+    color: #9ca3af;
+    padding: 0.25rem 0;
+    line-height: 1.5;
+}
+
+.retry-btn {
+    margin-top: 0.75rem;
+    padding: 0.4rem 0.9rem;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.retry-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
 }
 
 /* ============================================
@@ -1552,4 +1616,17 @@ body {
     width: 14px;
     height: 14px;
     stroke-width: 2;
+}
+
+/* Screen reader only */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
 }

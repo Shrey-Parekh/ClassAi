@@ -81,10 +81,9 @@ class QueryRequest(BaseModel):
 
 
 class SignInRequest(BaseModel):
-    """Sign-in request."""
+    """Sign-in request — role is NOT accepted from client (A2)."""
     email: str
     password: str
-    role: str
 
 
 class SignInResponse(BaseModel):
@@ -197,7 +196,6 @@ async def signin(request: SignInRequest):
     """
     email = request.email.lower().strip()
     password = request.password
-    requested_role = request.role.lower()
     
     # Check if user exists
     if email not in DEMO_USERS:
@@ -223,12 +221,8 @@ async def signin(request: SignInRequest):
             detail="Invalid credentials"
         )
     
-    # Verify role matches
-    if user_data["role"] != requested_role:
-        raise HTTPException(
-            status_code=403,
-            detail="Role mismatch"
-        )
+    # A2: role is NOT accepted from the client — the server authoritatively
+    # returns the role stored with the user record.
     
     # Generate token (in production, use JWT with expiry)
     import secrets

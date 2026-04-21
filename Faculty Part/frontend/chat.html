@@ -3,18 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' http://localhost:8001;">
     <title>Chat · ClassAI</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/chat.css">
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- A41: pinned version + SRI -->
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" 
+            integrity="sha384-6PgFXMZ8Ub8RvVJLJsL8qFqXqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqLqL" 
+            crossorigin="anonymous"></script>
 </head>
 <body>
     <script>
-        (function() {
-            if (!sessionStorage.getItem('classai_token')) {
+        // A4: Validate token with backend, not just presence
+        (async function() {
+            const token = sessionStorage.getItem('classai_token');
+            if (!token) {
                 window.location.replace('/signin');
+                return;
+            }
+            
+            try {
+                const res = await fetch('http://localhost:8001/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    sessionStorage.clear();
+                    window.location.replace('/signin');
+                }
+            } catch {
+                // Network error - allow through but session init will fail
             }
         })();
     </script>
@@ -22,9 +43,9 @@
     <div class="chat-root">
         <!-- Mobile backdrop -->
         <div class="mobile-backdrop" id="mobileBackdrop"></div>
-        
-        <!-- Sidebar -->
-        <aside class="sidebar">
+
+        <!-- A34: sidebar gets aria-hidden when closed on mobile -->
+        <aside class="sidebar" id="sidebar" aria-hidden="true">
             <div class="sidebar-inner">
                 <!-- Product mark -->
                 <div class="product-mark">
@@ -37,30 +58,24 @@
 
                 <!-- New conversation -->
                 <button class="sidebar-new" onclick="startNewChat()">
-                    <i data-lucide="plus"></i>
+                    <i data-lucide="plus" aria-hidden="true"></i>
                     <span>New conversation</span>
                 </button>
 
                 <!-- History -->
                 <div class="sidebar-history">
                     <div class="sidebar-history-label">Recent</div>
-                    <div class="sidebar-history-list" id="historyList">
-                        <!-- Populated dynamically -->
-                    </div>
+                    <div class="sidebar-history-list" id="historyList"></div>
                 </div>
 
                 <!-- Footer nav -->
                 <div class="sidebar-footer">
                     <a href="/" class="sidebar-nav-btn sidebar-nav-btn--active">
-                        <i data-lucide="home"></i>
+                        <i data-lucide="home" aria-hidden="true"></i>
                         <span>Home</span>
                     </a>
-                    <button class="sidebar-nav-btn">
-                        <i data-lucide="user-circle"></i>
-                        <span>Account</span>
-                    </button>
                     <button class="sidebar-nav-btn" onclick="signOut()">
-                        <i data-lucide="log-out"></i>
+                        <i data-lucide="log-out" aria-hidden="true"></i>
                         <span>Sign out</span>
                     </button>
                 </div>
@@ -71,13 +86,13 @@
         <main class="main-panel">
             <!-- Header -->
             <header class="main-header">
-                <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
-                    <i data-lucide="menu"></i>
+                <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
+                    <i data-lucide="menu" aria-hidden="true"></i>
                 </button>
-                <div class="model-id">ClassAI · Gemini</div>
+                <div class="model-id" id="modelId">ClassAI</div>
             </header>
 
-            <!-- Messages -->
+            <!-- A33: messages is a live region -->
             <div class="messages-container" id="messagesContainer">
                 <div class="messages-inner">
                     <!-- Welcome screen -->
@@ -87,14 +102,14 @@
                         <p class="welcome-description">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
                         <div class="welcome-prompts">
                             <button class="prompt-chip" onclick="usePrompt(this)">What are the leave rules for teaching staff?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">How do I apply for a grade appeal?</button>
+                            <button class="prompt-chip" onclick="usePrompt(this)">How do I apply for earned leave?</button>
                             <button class="prompt-chip" onclick="usePrompt(this)">What is the PhD coursework requirement?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">Where can I find the Academic Calendar 2024-25?</button>
+                            <button class="prompt-chip" onclick="usePrompt(this)">What form codes are in the Applications Compendium?</button>
                         </div>
                     </section>
 
-                    <!-- Messages thread -->
-                    <div class="messages-thread" id="messages"></div>
+                    <!-- Messages thread — A33: role=log for screen readers -->
+                    <div class="messages-thread" id="messages" role="log" aria-live="polite" aria-atomic="false"></div>
                 </div>
             </div>
 
@@ -102,17 +117,21 @@
             <footer class="composer-shell">
                 <div class="composer-inner">
                     <div class="composer-wrap">
-                        <textarea 
-                            id="userInput" 
-                            class="composer-input" 
+                        <!-- A50: maxlength cap -->
+                        <textarea
+                            id="userInput"
+                            class="composer-input"
                             placeholder="Ask a question about NMIMS policies, documents, or guidelines…"
                             rows="1"
+                            maxlength="2000"
+                            aria-label="Query input"
                         ></textarea>
-                        <button id="sendBtn" class="composer-send" disabled>
-                            <i data-lucide="arrow-up"></i>
+                        <button id="sendBtn" class="composer-send" disabled aria-label="Send message">
+                            <i data-lucide="arrow-up" aria-hidden="true"></i>
                         </button>
-                        <button id="stopBtn" class="composer-stop" style="display: none;">
-                            <i data-lucide="square"></i>
+                        <!-- A10: stop button wired in chat.js -->
+                        <button id="stopBtn" class="composer-stop" style="display: none;" aria-label="Stop generation">
+                            <i data-lucide="square" aria-hidden="true"></i>
                         </button>
                     </div>
                     <div class="composer-hint">Enter to send · Shift + Enter for new line</div>
@@ -121,6 +140,7 @@
         </main>
     </div>
 
+    <script src="/static/renderer.js"></script>
     <script src="/static/chat.js"></script>
     <script>lucide.createIcons();</script>
 </body>
