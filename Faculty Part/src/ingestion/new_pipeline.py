@@ -93,6 +93,10 @@ class NewIngestionPipeline:
         print(f"{'─'*60}")
         
         try:
+            # Reset per-document dedup — prevents cross-document boilerplate
+            # suppression (shared NMIMS preambles, signature blocks, etc.)
+            self.chunker.seen_hashes = set()
+
             # Step 1: Process document (extract text)
             print(f"   [1/4] Extracting text from {file_path.suffix} file...")
             processed = self.doc_processor.process_document(file_path, doc_metadata)
@@ -122,35 +126,52 @@ class NewIngestionPipeline:
                     skipped_count += 1
                     skip_reasons[reason] += 1
                     continue
-                
+
                 # Clean text
                 clean_text = self.chunker.clean_chunk_text(chunk.text)
-                
+
+                # FIX #11: Guard against empty chunks after cleaning — embedding
+                # an empty string yields a degenerate vector.
+                if not clean_text or not clean_text.strip():
+                    skipped_count += 1
+                    skip_reasons["empty_after_clean"] += 1
+                    continue
+
                 # Embed
                 try:
                     dense_vector = self._embed_text(clean_text)
-                    
-                    # Store in Qdrant
+
+                    # Recompute token count post-cleaning so payload is accurate (item 8)
+                    chunk.metadata["token_count"] = self.chunker._count_tokens(clean_text)
+
+                    # Store in Qdrant (pass chunk_index for ID uniqueness)
                     self._store_chunk(
                         text=clean_text,
                         dense_vector=dense_vector,
-                        metadata=chunk.metadata
+                        metadata=chunk.metadata,
+                        chunk_index=i,
                     )
-                    
+
                     stored_count += 1
-                    
+
                     # Update stats by source type
-                    source_type = chunk.metadata.get("source_type", "unknown")
-                    self.stats[source_type] += 1
-                    
+                    chunk_source_type = chunk.metadata.get("source_type", "unknown")
+                    self.stats[chunk_source_type] += 1
+
                     # Progress indicator
                     if stored_count % 5 == 0:
                         print(f"         • Processed {stored_count}/{len(chunks)} chunks...")
-                    
+
                 except Exception as e:
                     print(f"         ✗ Failed to embed chunk {i+1}: {str(e)[:50]}")
                     skipped_count += 1
                     skip_reasons["embedding_failed"] += 1
+                    # Clear CUDA cache on failure to avoid cascading OOM
+                    try:
+                        if torch.cuda.is_available():
+                            torch.cuda.empty_cache()
+                    except Exception:
+                        pass
             
             print(f"         ✓ Stored {stored_count} chunks")
             if skipped_count > 0:
@@ -184,18 +205,18 @@ class NewIngestionPipeline:
     ) -> List[Dict[str, Any]]:
         """
         Ingest all documents in a directory.
-        
+
         Args:
             directory: Directory containing documents
             metadata_file: Optional JSON file with per-document metadata
-        
+
         Returns:
             List of ingestion summaries
         """
         print("\n" + "="*60)
         print("STARTING DOCUMENT INGESTION")
         print("="*60)
-        
+
         # Load metadata if provided
         metadata_map = {}
         if metadata_file and metadata_file.exists():
@@ -203,85 +224,106 @@ class NewIngestionPipeline:
             with open(metadata_file, 'r', encoding='utf-8') as f:
                 metadata_map = json.load(f)
             print(f"   ✓ Loaded metadata for {len(metadata_map)} documents")
-        
+
         results = []
-        
+
         # Process all supported files
         supported_extensions = [
             '.pdf', '.png', '.jpg', '.jpeg', '.txt', '.md',
             '.json', '.csv', '.xlsx', '.xls', '.docx'
         ]
-        
+
         # Count files first
-        all_files = [f for f in directory.rglob('*') 
+        all_files = [f for f in directory.rglob('*')
                      if f.is_file() and f.suffix.lower() in supported_extensions]
-        
+
         print(f"\n📁 Found {len(all_files)} documents to process")
         print(f"   Directory: {directory}")
         print(f"   Supported types: {', '.join(supported_extensions)}")
-        
+
         # Process each file
         for idx, file_path in enumerate(all_files, 1):
             print(f"\n[{idx}/{len(all_files)}] ", end="")
-            
-            # Get metadata for this file
-            doc_metadata = metadata_map.get(file_path.name, {
-                "doc_id": file_path.stem,
-                "title": file_path.stem,
-                "applies_to": "all_faculty",
-            })
-            
+
+            # FIX #3: Look up metadata by relative path first (handles duplicate
+            # basenames in nested subdirectories), then fall back to basename,
+            # then to sensible defaults.
+            try:
+                rel_key = str(file_path.relative_to(directory)).replace("\\", "/")
+            except ValueError:
+                rel_key = file_path.name
+
+            doc_metadata = (
+                metadata_map.get(rel_key)
+                or metadata_map.get(file_path.name)
+                or {
+                    "doc_id": file_path.stem,
+                    "title": file_path.stem,
+                    "applies_to": "all_faculty",
+                }
+            )
+
             result = self.ingest_document(file_path, doc_metadata)
             results.append(result)
-        
+
         # Print summary
         self._print_summary(results)
-        
+
         return results
     
     def _embed_text(self, text: str) -> List[float]:
         """
         Embed text using BAAI/bge-m3.
-        
+
         Args:
             text: Text to embed
-        
+
         Returns:
             1024-dimensional embedding vector
         """
+        # Note: batch_size is a no-op for single-string inputs; batching happens
+        # at call-site level when needed. Kept as a scalar call for compatibility.
         embedding = self.embedding_model.encode(
             text,
             normalize_embeddings=True,
-            batch_size=8,
             convert_to_numpy=True
         )
         return embedding.tolist()
-    
+
     def _store_chunk(
         self,
         text: str,
         dense_vector: List[float],
-        metadata: Dict[str, Any]
+        metadata: Dict[str, Any],
+        chunk_index: int = 0,
     ):
         """Store chunk with embeddings in Qdrant."""
-        # Generate unique ID
+
+        text_hash = hashlib.md5(text.encode("utf-8")).hexdigest()[:12]
         chunk_id_str = "|".join([
             metadata.get("document_name", ""),
             str(metadata.get("section_index", 0)),
             str(metadata.get("sub_section_index", metadata.get("sub_index", 0))),
             str(metadata.get("section_letter", "")),
             str(metadata.get("chunk_type", "")),
+            str(chunk_index),
+            text_hash,
         ])
         chunk_id_int = int(hashlib.md5(chunk_id_str.encode()).hexdigest()[:16], 16)
-        
-        # Prepare payload
+
+        # FIX #1: Unpack metadata FIRST so that our canonical content/char_count/
+        # token_count keys override any accidental collisions from upstream
+        # metadata. The BM25 index relies on payload["content"] being the
+        # cleaned chunk text — if an upstream step had also stashed a "content"
+        # key under a different meaning, the previous ordering silently clobbered
+        # the field and broke BM25 recall.
         payload = {
-            "content": text,  # Use "content" to match BM25 index expectations
+            **metadata,
+            "content": text,
             "char_count": len(text),
-            "token_count": int(len(text.split()) * 1.3),  # Word-based estimation for consistency
-            **metadata
+            "token_count": int(len(text.split()) * 1.3),
         }
-        
+
         # Store in Qdrant
         self.vector_db.upsert(
             collection_name=self.collection_name,

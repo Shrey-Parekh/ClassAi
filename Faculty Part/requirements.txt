@@ -39,6 +39,7 @@ pdf2image>=1.17.0
 # Utilities
 requests==2.31.0
 numpy==1.26.3
+tiktoken>=0.6.0
 
 # LLM API (Gemini uses REST API via requests, no additional package needed)
 

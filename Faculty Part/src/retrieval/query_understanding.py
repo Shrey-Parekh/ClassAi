@@ -561,13 +561,20 @@ class QueryAnalyzer:
         query_words = set(query_lower.split())
         expansion_terms = [term for term in set(expansion_terms) if term.lower() not in query_words]
         
-        # Limit expansion based on query type
+        # R11: Limit expansion based on query specificity
+        # Specific queries (name, form code) get fewer expansion terms
+        # to avoid diluting the distinguishing signal
+        has_specific_entity = bool(entities) or bool(re.search(
+            r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', query_clean
+        ))
         if is_vague:
-            max_terms = 20  # More terms for vague queries
+            max_terms = 20
+        elif has_specific_entity:
+            max_terms = 5   # R11: cap for specific queries
         elif "faculty" in expansion_terms or "professor" in expansion_terms:
-            max_terms = 10  # Faculty queries
+            max_terms = 8
         else:
-            max_terms = 8  # Specific queries
+            max_terms = 8
         
         expansion_terms = expansion_terms[:max_terms]
         
@@ -629,9 +636,11 @@ class QueryAnalyzer:
         if max(intent_scores.values()) > 0:
             top = max(intent_scores, key=intent_scores.get)
 
-            # Refine generic "lookup" into person_lookup vs policy_lookup so
-            # hybrid-search weights can differ for these two very different
-            # query shapes.
+            # R10: eligibility takes priority — don't fall through to person/policy
+            if top == "eligibility" or intent_scores.get("eligibility", 0) > 0:
+                return "eligibility"
+
+            # Refine generic "lookup" into person_lookup / policy_lookup / topic_search
             if top == "lookup":
                 person_signals = [
                     r"\b(dr|prof|professor|mr|ms|mrs|miss)\.?\b",
@@ -655,6 +664,12 @@ class QueryAnalyzer:
                 policy_hits = sum(
                     1 for p in policy_signals if re.search(p, query, re.IGNORECASE)
                 )
+                # R1: topic_search — no person/policy signals but has a topic entity
+                topic_hits = len(re.findall(
+                    self.entity_patterns.get("topic", r"(?!)"), query, re.IGNORECASE
+                ))
+                if person_hits == 0 and policy_hits == 0 and topic_hits > 0:
+                    return "topic_search"
                 if policy_hits > person_hits:
                     return "policy_lookup"
                 return "person_lookup"

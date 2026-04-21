@@ -111,6 +111,7 @@ class HybridSearchEngine:
         filters: Dict[str, Any] = None,
         name_embedding: List[float] = None,
         name_boost: float = 0.0,
+        name_filters: Dict[str, Any] = None,
         intent: str = "general"
     ) -> List[SearchResult]:
         """
@@ -141,13 +142,13 @@ class HybridSearchEngine:
             filters=filters
         )
         
-        # 2. Name-boosted search (if name embedding provided)
+        # 2. Name-boosted search (R5: use name_filters, not main filters)
         name_results = []
         if name_embedding is not None and name_boost > 0:
             name_results = self._dense_search(
                 name_embedding,
                 top_k=top_k,
-                filters=filters
+                filters=name_filters  # R5: no domain filter on name search
             )
         
         # 3. Sparse search using expanded query for keywords
@@ -344,99 +345,40 @@ class HybridSearchEngine:
         sparse_weight: float
     ) -> List[SearchResult]:
         """
-        Fuse dense, sparse, and name-based results using intent-based weighted scoring.
-        
-        Scores are normalized to 0-1 range to maintain consistency across intents.
-        
-        Args:
-            dense_results: Results from dense semantic search
-            sparse_results: Results from sparse keyword search
-            name_results: Results from name-focused search
-            name_boost: Boost factor for name matches
-            top_k: Number of final results to return
-            dense_weight: Weight for dense results (intent-based)
-            sparse_weight: Weight for sparse results (intent-based)
+        Fuse dense, sparse, and name results using Reciprocal Rank Fusion (RRF).
+
+        RRF score = Σ weight_i / (k + rank_i)  where k=60.
+        Scale-free — handles score distribution skew without per-list normalization.
+        Intent weights scale each list's contribution.
         """
-        # Normalize scores
-        dense_results = self._normalize_scores(dense_results)
-        sparse_results = self._normalize_scores(sparse_results)
-        name_results = self._normalize_scores(name_results)
-        
-        # Calculate maximum possible score for normalization
-        max_possible_score = dense_weight + sparse_weight
-        has_name_boost = len(name_results) > 0 and name_boost > 0
-        if has_name_boost:
-            max_possible_score += name_boost
-        
-        # Combine results by chunk_id
-        combined: Dict[str, SearchResult] = {}
-        
-        # Add dense results with intent-based weight
-        for result in dense_results:
-            combined[result.chunk_id] = SearchResult(
-                chunk_id=result.chunk_id,
-                content=result.content,
-                score=result.score * dense_weight,
-                metadata=result.metadata,
+        RRF_K = 60
+
+        # Build a lookup: chunk_id → best SearchResult (for content/metadata)
+        best: Dict[str, SearchResult] = {}
+        scores: Dict[str, float] = {}
+
+        def _add_list(results: List[SearchResult], weight: float) -> None:
+            for rank, result in enumerate(results, start=1):
+                cid = str(result.chunk_id)
+                scores[cid] = scores.get(cid, 0.0) + weight / (RRF_K + rank)
+                if cid not in best:
+                    best[cid] = result
+
+        _add_list(dense_results, dense_weight)
+        _add_list(sparse_results, sparse_weight)
+        if name_results and name_boost > 0:
+            _add_list(name_results, name_boost)
+
+        # Build final list sorted by RRF score
+        sorted_ids = sorted(scores, key=lambda c: scores[c], reverse=True)[:top_k]
+        fused = []
+        for cid in sorted_ids:
+            r = best[cid]
+            fused.append(SearchResult(
+                chunk_id=r.chunk_id,
+                content=r.content,
+                score=scores[cid],
+                metadata=r.metadata,
                 source="hybrid"
-            )
-        
-        # Add sparse results with intent-based weight
-        for result in sparse_results:
-            if result.chunk_id in combined:
-                # Add sparse score to existing
-                combined[result.chunk_id].score += result.score * sparse_weight
-            else:
-                # New result from sparse only
-                combined[result.chunk_id] = SearchResult(
-                    chunk_id=result.chunk_id,
-                    content=result.content,
-                    score=result.score * sparse_weight,
-                    metadata=result.metadata,
-                    source="hybrid"
-                )
-        
-        # Add name-based boost
-        if has_name_boost:
-            for result in name_results:
-                if result.chunk_id in combined:
-                    # Boost existing result
-                    combined[result.chunk_id].score += result.score * name_boost
-                else:
-                    # New result from name search
-                    combined[result.chunk_id] = SearchResult(
-                        chunk_id=result.chunk_id,
-                        content=result.content,
-                        score=result.score * name_boost,
-                        metadata=result.metadata,
-                        source="hybrid"
-                    )
-        
-        # Normalize all scores to 0-1 range
-        for result in combined.values():
-            result.score = result.score / max_possible_score
-        
-        # Sort by combined score and return top-k
-        sorted_results = sorted(
-            combined.values(),
-            key=lambda x: x.score,
-            reverse=True
-        )
-        
-        return sorted_results[:top_k]
-    
-    def _normalize_scores(self, results: List[SearchResult]) -> List[SearchResult]:
-        """Normalize scores to 0-1 range."""
-        if not results:
-            return results
-        
-        max_score = max(r.score for r in results)
-        min_score = min(r.score for r in results)
-        
-        if max_score == min_score:
-            return results
-        
-        for result in results:
-            result.score = (result.score - min_score) / (max_score - min_score)
-        
-        return results
+            ))
+        return fused

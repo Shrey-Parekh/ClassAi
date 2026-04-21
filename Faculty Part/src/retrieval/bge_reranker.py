@@ -42,50 +42,43 @@ class BGEReranker:
         query: str,
         results: List[Any],
         top_k: int = 15,
-        max_per_doc: int = 3
+        max_per_doc: int = 3,
+        intent: str = "general"
     ) -> List[Any]:
         """
-        Rerank search results using cross-encoder with diversity cap.
-        
-        Args:
-            query: Original query text
-            results: List of SearchResult objects from hybrid search
-            top_k: Number of top results to return
-            max_per_doc: Maximum chunks from any single document (default: 3)
-        
-        Returns:
-            Reranked list of SearchResult objects with diversity applied
+        Rerank search results using cross-encoder with intent-aware diversity cap.
         """
         if not results:
             return []
-        
+
+        # R16: intent-aware diversity cap
+        INTENT_MAX_PER_DOC = {
+            "person_lookup": 8,
+            "lookup": 8,
+            "topic_search": 3,
+            "policy_lookup": 5,
+            "procedure": 6,
+            "eligibility": 5,
+            "general": 4,
+        }
+        effective_max = INTENT_MAX_PER_DOC.get(intent.lower(), max_per_doc)
+
         try:
-            # Prepare query-document pairs
             pairs = [[query, result.content] for result in results]
-            
-            # Get reranker scores
             scores = self.model.compute_score(pairs, normalize=True)
-            
-            # Handle single result case (scores is float, not list)
+
             if not isinstance(scores, list):
                 scores = [scores]
-            
-            # Update result scores with reranker scores
+
             for result, score in zip(results, scores):
                 result.score = float(score)
                 result.source = "reranked"
-            
-            # Sort by reranker score
+
             reranked = sorted(results, key=lambda x: x.score, reverse=True)
-            
-            # Apply diversity cap: max N chunks per doc_id
-            diverse_results = self._apply_diversity_cap(reranked, max_per_doc, top_k)
-            
-            return diverse_results
-            
+            return self._apply_diversity_cap(reranked, effective_max, top_k)
+
         except Exception as e:
-            self.logger.error(f"Reranking failed: {e}")
-            # Fallback: return original results
+            self.logger.error("Reranking failed: %s", e)
             return results[:top_k]
     
     def _apply_diversity_cap(

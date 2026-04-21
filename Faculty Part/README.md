@@ -49,10 +49,10 @@ docker-compose up -d
 python scripts/ingest_new.py --input data/raw --metadata data/metadata.json
 
 # 7. Start the API server
-python -m uvicorn src.api.main:app --reload --port 8000
+python -m uvicorn src.api.main:app --reload --port 8001
 ```
 
-Open `http://localhost:8000/chat` in your browser.
+Open `http://localhost:8001/chat` in your browser.
 
 ## Demo Credentials
 

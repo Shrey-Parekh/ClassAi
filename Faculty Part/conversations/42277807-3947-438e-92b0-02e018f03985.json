@@ -1,0 +1,91 @@
+{
+  "session_id": "42277807-3947-438e-92b0-02e018f03985",
+  "messages": [
+    {
+      "role": "user",
+      "content": "Tell me more about the Travel Expense form?",
+      "timestamp": "2026-04-20T16:15:35.665538",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Travel Expense Claim Form Details\", \"subtitle\": null, \"sections\": [{\"heading\": \"Form Code\", \"type\": \"table\", \"headers\": [\"Detail\"], \"rows\": [[\"Form Code: HR-TE-02\"]]}, {\"heading\": \"Sections\", \"type\": \"paragraph\", \"content\": \"The Travel Expense Claim Form (HR-TE-02) is divided into three sections: Employee Details, Trip Details, and Expense Details.\"}, {\"heading\": \"Expense Categories\", \"type\": \"table\", \"headers\": [\"Expense Category\"], \"rows\": [[\"Air / Rail / Bus Fare (Travel to destination)\"], [\"Local Transport (Taxi / Auto to airport/station)\"], [\"Local Travel at Destination\"], [\"Hotel / Accommodation\"], [\"Conference Registration Fee\"], [\"Per Diem / Daily Allowance\"], [\"Meals (only if not covered by per diem)\"], [\"Visa / Passport Fees (International Travel)\"], [\"Travel Insurance\"], [\"Miscellaneous\"]]}, {\"heading\": \"Entitlement Reference\", \"type\": \"table\", \"headers\": [\"Designation\", \"Hotel Limit/Night (Metro)\", \"Hotel Limit/Night (Other)\", \"Daily Allowance (Metro)\", \"DA (Other)\"], \"rows\": [[\"Professor & Above\", \"Rs. 8,000\", \"Rs. 5,000\", \"Rs. 1,500\", \"Rs. 1,000\"], [\"Associate Professor\", \"Rs. 6,000\", \"Rs. 4,000\", \"Rs. 1,200\", \"Rs. 800\"], [\"Assistant Professor\", \"Rs. 4,000\", \"Rs. 3,000\", \"Rs. 1,000\", \"Rs. 600\"]]}, {\"heading\": \"Submission and Processing\", \"type\": \"paragraph\", \"content\": \"Submit the Travel Expense Claim Form (HR-TE-02) within 7 working days of return from official travel.  Claims submitted after 30 days will not be processed without specific approval from the Dean. Reimbursements are credited to salary account within 15 working days of submission.\"}, {\"heading\": \"Bill Requirements\", \"type\": \"paragraph\", \"content\": \"Original bills/receipts for all expenses above Rs. 500 must be attached. Boarding passes are mandatory for air travel reimbursement.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-20T16:15:35.666538",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Tell me more about the Leave application",
+      "timestamp": "2026-04-20T16:18:48.562482",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Application Process\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"To apply for planned leave, faculty should log in to HRMS at hrms.nmims.edu with institutional credentials. Navigate to Leave Management > Apply for Leave and select the leave type, duration, and reason. Upload supporting documents if required.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"An automatic email is sent to your Department Head for approval. Upon Department Head approval, HR Department ratifies and leave balance is updated. You will receive an email confirmation with the leave reference number.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"After returning from leave, faculty must apply in HRMS within 2 working days.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-20T16:18:48.563480",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    },
+    {
+      "role": "user",
+      "content": "Faculty Leave Application Process",
+      "timestamp": "2026-04-20T16:21:12.329072",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"general\", \"title\": \"Faculty Leave Policy\", \"subtitle\": null, \"sections\": [{\"heading\": null, \"type\": \"paragraph\", \"content\": \"To apply for leave, faculty should log in to HRMS at hrms.nmims.edu with institutional credentials, navigate to Leave Management > Apply for Leave, select leave type, duration, and reason, upload supporting documents if required, and submit the application. An automatic email is sent to your Department Head for approval.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"Upon Department Head approval, HR Department ratifies and leave balance is updated. You receive an email confirmation with the leave reference number.\"}, {\"heading\": null, \"type\": \"paragraph\", \"content\": \"Faculty must inform their Department Head via phone/email on the day of absence and apply in HRMS within 2 working days of return. Failure to apply within the stipulated time results in the day being marked as absent/LWP.\"}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25, NMIMS Faculty Applications Compendium\", \"confidence\": \"high\", \"fallback\": null}",
+      "timestamp": "2026-04-20T16:21:12.330081",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "applications_2024",
+            "title": "NMIMS Faculty Applications Compendium",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          },
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "general"
+      }
+    }
+  ],
+  "created_at": "2026-04-20T16:15:35.665538",
+  "updated_at": "2026-04-20T16:21:12.330081"
+}

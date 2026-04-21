@@ -132,11 +132,15 @@ class AnswerGenerator:
                 self.logger.info(f"Token budget exhausted at chunk {i+1}/{len(chunks)}")
                 break
             
-            # Quality threshold: stop if relevance drops too low
-            # Reranker scores are typically 0-1, stop if < 0.3
+            # G8: Adaptive quality threshold — relative to top chunk score
             score = chunk.get("score", 1.0)
-            if i > 5 and score < 0.3:  # After first 5, enforce quality threshold
-                self.logger.info(f"Quality threshold not met at chunk {i+1} (score: {score:.3f})")
+            top_score = chunks[0].get("score", 1.0) if chunks else 1.0
+            adaptive_threshold = max(0.2, top_score * 0.5)
+            if i > 5 and score < adaptive_threshold:
+                self.logger.info(
+                    "Adaptive quality threshold %.2f not met at chunk %d (score: %.3f)",
+                    adaptive_threshold, i + 1, score
+                )
                 break
             
             selected.append(chunk)
@@ -228,42 +232,71 @@ class AnswerGenerator:
         self.logger.debug(f"Usage: {(estimated_input_tokens/self.MAX_CONTEXT_TOKENS)*100:.1f}% of allocated context")
         self.logger.debug("=== END TOKEN ESTIMATE ===")
 
-        # Generate with Gemini 2.0 Flash
-        # TODO: Update format parameter for Gemini client wrapper (may need response_mime_type="application/json")
+        # Generate with LLM
         raw_response = self.llm.generate(
             prompt,
-            temperature=0.2,
-            max_tokens=2048,  # Increased for complex JSON responses with citations
-            format="json"  # TODO: Verify this parameter works with Gemini client wrapper
+            temperature=0.0,
+            max_tokens=self.OUTPUT_TOKENS,
+            format="json"
         )
-        
-        # DIAGNOSTIC: Log what Gemini actually returns
-        self.logger.debug(f"=== RAW LLM RESPONSE ===")
-        self.logger.debug(f"Length: {len(raw_response)} chars")
-        self.logger.debug(f"First 500 chars: {raw_response[:500]}")
-        self.logger.debug(f"Last 100 chars: {raw_response[-100:]}")
-        self.logger.debug("=== END RAW RESPONSE ===")
 
-        # Parse and validate JSON
+        # G11: Detect likely truncation
+        if raw_response and not raw_response.rstrip().endswith('}'):
+            self.logger.warning("LLM response likely truncated (does not end with '}')")
+
+        # Parse and validate JSON — G10: retry once on failure
         structured = self._parse_json_response(raw_response, intent_type, query)
+        if structured.confidence == "none" and structured.fallback and "unable to format" in (structured.fallback or ""):
+            self.logger.info("Parse failed on first attempt, retrying with repair prompt")
+            repair_prompt = (
+                f"Your previous response was not valid JSON. Here it is:\n\n{raw_response[:800]}\n\n"
+                f"Fix it so it is valid JSON matching the required schema. Return ONLY valid JSON."
+            )
+            raw_response2 = self.llm.generate(repair_prompt, temperature=0.0,
+                                               max_tokens=self.OUTPUT_TOKENS, format="json")
+            structured2 = self._parse_json_response(raw_response2, intent_type, query)
+            if structured2.confidence != "none":
+                structured = structured2
         
-        # Auto-generate footer from source documents if not provided by LLM
+        # Auto-generate footer from source documents if not provided by LLM (G19: prefer metadata title)
         if not structured.footer:
             source_docs = set()
             for chunk in chunks_to_use:
-                doc_name = chunk.get("metadata", {}).get("document_name", "")
-                if doc_name:
-                    clean_name = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
-                    source_docs.add(clean_name)
-            
+                meta = chunk.get("metadata", {})
+                # Prefer human-readable title from metadata.json, fall back to cleaned filename
+                title = meta.get("title", "")
+                if not title:
+                    doc_name = meta.get("document_name", "")
+                    title = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
+                if title:
+                    source_docs.add(title)
             if source_docs:
                 structured.footer = "Based on: " + ", ".join(sorted(source_docs))
 
         # Extract sources
         sources = self._extract_sources(chunks_to_use)
 
-        # Calculate confidence
-        confidence = self._calculate_confidence(chunks_to_use, structured)
+        # G3: Grounding check — downgrade confidence if answer isn't anchored in chunks
+        grounding = self._check_grounding(structured, chunks_to_use)
+        ratio = grounding.get("ratio")
+        if ratio is None:
+            # Empty answer — downgrade for no-content reason, not hallucination
+            if structured.confidence in ("high", "medium"):
+                structured.confidence = "low"
+        elif ratio < 0.5 and structured.confidence in ("high", "medium"):
+            self.logger.warning(
+                "Grounding ratio %.2f below 0.5 — downgrading confidence", ratio
+            )
+            structured.confidence = "low"
+        elif ratio < 0.25:
+            structured.confidence = "none"
+
+        # G2: Take minimum of LLM confidence and heuristic confidence
+        heuristic_confidence = self._calculate_confidence(chunks_to_use, structured)
+        confidence_order = ["none", "low", "medium", "high"]
+        llm_conf_idx = confidence_order.index(structured.confidence)
+        heuristic_conf_idx = confidence_order.index(heuristic_confidence)
+        confidence = confidence_order[min(llm_conf_idx, heuristic_conf_idx)]
         
         # Log context usage
         self._log_context_usage(query, chunks_to_use, estimated_context_tokens)
@@ -328,11 +361,9 @@ class AnswerGenerator:
             return StructuredResponse(**data)
         
         except (json.JSONDecodeError, ValidationError) as e:
-            # Log the failure for debugging
-            self.logger.error(f"JSON parse failed for intent '{intent}': {e}")
-            self.logger.error(f"Raw response was: {raw_text[:500]}")
-            
-            # Return clean fallback response
+            self.logger.error("JSON parse failed for intent '%s': %s", intent, e)
+            self.logger.error("Raw response was: %s", raw_text[:500])
+
             return StructuredResponse(
                 intent=intent,
                 title="Response Error",
@@ -378,20 +409,24 @@ class AnswerGenerator:
                 section_type = section.get("type", "paragraph")
                 
                 if section_type in ["bullets", "steps"]:
-                    # These need "items" field
-                    for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
-                        if correct_field == "items" and wrong_field in section:
-                            section["items"] = section.pop(wrong_field)
+                    # These need "items" field — only fix if "items" is missing
+                    if "items" not in section:
+                        for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
+                            if correct_field == "items" and wrong_field in section:
+                                section["items"] = section.pop(wrong_field)
+                                break
                     
                     # Ensure items is a list
                     if "items" in section and not isinstance(section["items"], list):
                         section["items"] = [str(section["items"])]
                 
                 elif section_type == "paragraph":
-                    # These need "content" field
-                    for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
-                        if correct_field == "content" and wrong_field in section:
-                            section["content"] = section.pop(wrong_field)
+                    # These need "content" field — only fix if "content" is missing
+                    if "content" not in section:
+                        for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
+                            if correct_field == "content" and wrong_field in section:
+                                section["content"] = section.pop(wrong_field)
+                                break
                 
                 elif section_type == "table":
                     # Normalize table: LLM may send content as list of dicts
@@ -427,29 +462,115 @@ class AnswerGenerator:
         
         return data
     
+    def _check_grounding(
+        self,
+        structured: Any,
+        chunks: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Estimate how much of the generated answer is supported by chunks.
+
+        Returns ratio (0..1 or None if no sentences), grounded/total counts,
+        and a reason tag. Uses 3-gram shingle overlap with Jaccard fallback.
+        ratio=None means empty answer (not hallucination).
+        """
+        sentences = self._extract_answer_sentences(structured)
+        if not sentences:
+            return {"ratio": None, "grounded": 0, "total": 0,
+                    "ungrounded_samples": [], "reason": "no_answer_sentences"}
+        if not chunks:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3], "reason": "no_chunks"}
+
+        chunk_tokens: List[str] = []
+        for chunk in chunks:
+            text = (
+                chunk.get("text") or chunk.get("content") or
+                chunk.get("payload", {}).get("text", "") or ""
+            )
+            chunk_tokens.extend(self._normalize_text(text))
+
+        chunk_shingles = self._shingle_set(chunk_tokens, n=3)
+        chunk_unigrams = set(chunk_tokens)
+
+        if not chunk_shingles and not chunk_unigrams:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3], "reason": "empty_chunk_shingles"}
+
+        grounded = 0
+        ungrounded: List[str] = []
+        for sentence in sentences:
+            s_tokens = self._normalize_text(sentence)
+            if not s_tokens:
+                grounded += 1
+                continue
+            s_shingles = self._shingle_set(s_tokens, n=3)
+            s_unigrams = set(s_tokens)
+            if s_shingles & chunk_shingles:
+                grounded += 1
+                continue
+            overlap = len(s_unigrams & chunk_unigrams) / len(s_unigrams)
+            if overlap >= 0.5:
+                grounded += 1
+            else:
+                ungrounded.append(sentence)
+
+        ratio = grounded / len(sentences)
+        return {
+            "ratio": round(ratio, 3),
+            "grounded": grounded,
+            "total": len(sentences),
+            "ungrounded_samples": ungrounded[:3],
+            "reason": "ok" if ratio >= 0.5 else "low_overlap",
+        }
+
+    def _extract_answer_sentences(self, structured: Any) -> List[str]:
+        """Extract content-bearing sentences from a StructuredResponse."""
+        sentences = []
+        if not hasattr(structured, 'sections'):
+            return sentences
+        for section in structured.sections:
+            content = getattr(section, 'content', None)
+            if content and isinstance(content, str):
+                sentences.extend(re.split(r'(?<=[.!?])\s+', content.strip()))
+            items = getattr(section, 'items', None)
+            if items and isinstance(items, list):
+                sentences.extend(items)
+        return [s.strip() for s in sentences if len(s.strip()) > 10]
+
+    def _normalize_text(self, text: str) -> List[str]:
+        """Lowercase, remove punctuation, split to tokens, remove stopwords."""
+        _STOPWORDS = {'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
+                      'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+                      'would', 'could', 'should', 'may', 'might', 'shall', 'can',
+                      'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+                      'and', 'or', 'but', 'not', 'this', 'that', 'it', 'its'}
+        tokens = re.findall(r'\b[a-z0-9]+\b', text.lower())
+        return [t for t in tokens if t not in _STOPWORDS and len(t) > 1]
+
+    def _shingle_set(self, tokens: List[str], n: int = 3) -> set:
+        """Build n-gram shingle set from token list."""
+        return {tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1)}
+
     def _build_context(self, chunks: List[Dict[str, Any]]) -> str:
         """
-        Build context string from retrieved chunks.
+        Build numbered context string from retrieved chunks.
         
-        Each chunk includes source information for reference.
+        Each chunk is numbered [N] so the LLM can reference sources.
         """
         context_parts = []
-        
-        for chunk in chunks:
-            # Text is at top level, not in metadata
+
+        for i, chunk in enumerate(chunks, 1):
             content = chunk.get("text", "")
             doc_name = chunk.get("metadata", {}).get("document_name", "Unknown Document")
             section = chunk.get("metadata", {}).get("section_title", "")
-            
-            # Build source header
-            source_header = f"Source: {doc_name}"
+
+            source_header = f"[{i}] Source: {doc_name}"
             if section:
                 source_header += f" — {section}"
-            
-            # Format without numbering
-            formatted = f"{source_header}\n{content}"
-            context_parts.append(formatted)
-        
+
+            context_parts.append(f"{source_header}\n{content}")
+
         return "\n\n---\n\n".join(context_parts)
     
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:

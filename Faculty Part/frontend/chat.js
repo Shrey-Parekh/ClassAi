@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:8000';
+const API_URL = 'http://localhost:8001';
 
 const messages = document.getElementById('messages');
 const userInput = document.getElementById('userInput');
