@@ -112,8 +112,30 @@
         ],
         "intent": "general"
       }
+    },
+    {
+      "role": "user",
+      "content": "What does the Employee Resource book cover?",
+      "timestamp": "2026-04-21T07:14:14.774981",
+      "metadata": {}
+    },
+    {
+      "role": "assistant",
+      "content": "{\"intent\": \"information_request\", \"title\": \"Employee Resource Book Coverage\", \"subtitle\": null, \"sections\": [{\"heading\": \"Overview\", \"type\": \"paragraph\", \"content\": \"This Employee Resource Book (ERB) is the official reference document for all faculty members across NMIMS campuses. It supersedes all previous versions and informal communications on the topics covered herein.\"}, {\"heading\": \"Topics Covered\", \"type\": \"bullets\", \"items\": [\"Policies\", \"Procedures\", \"Entitlements\", \"Values\"]}], \"footer\": \"Based on: NMIMS Employee Resource Book 2024-25\", \"confidence\": \"high\", \"fallback\": null, \"caveats\": [], \"effective_date\": null, \"suggested_followups\": []}",
+      "timestamp": "2026-04-21T07:14:14.774981",
+      "metadata": {
+        "sources": [
+          {
+            "doc_id": "employee_resource_2024",
+            "title": "NMIMS Employee Resource Book 2024-25",
+            "date": "2024-08-01",
+            "applies_to": "all_faculty"
+          }
+        ],
+        "intent": "person_lookup"
+      }
     }
   ],
   "created_at": "2026-04-21T06:54:58.125466",
-  "updated_at": "2026-04-21T07:11:17.574807"
+  "updated_at": "2026-04-21T07:14:14.774981"
 }
