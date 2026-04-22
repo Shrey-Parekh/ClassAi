@@ -1,0 +1,114 @@
+# ============================================================================
+# ClassAI - Development Requirements
+# Additional packages for development, testing, and debugging
+# ============================================================================
+
+# Include base requirements
+-r requirements.txt
+
+# ── Testing ─────────────────────────────────────────────────────────────────
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+pytest-timeout>=2.1.0
+httpx>=0.24.0  # For testing FastAPI
+
+# ── Code Quality ────────────────────────────────────────────────────────────
+# Formatting
+black>=23.0.0
+isort>=5.12.0
+
+# Linting
+flake8>=6.0.0
+pylint>=2.17.0
+mypy>=1.5.0
+
+# Security
+bandit>=1.7.5
+safety>=2.3.0
+
+# ── Development Tools ───────────────────────────────────────────────────────
+# Interactive Python
+ipython>=8.12.0
+jupyter>=1.0.0
+notebook>=7.0.0
+
+# Debugging
+ipdb>=0.13.13
+pdbpp>=0.10.3
+
+# Profiling
+memory-profiler>=0.61.0
+line-profiler>=4.0.0
+
+# ── Documentation ───────────────────────────────────────────────────────────
+mkdocs>=1.5.0
+mkdocs-material>=9.0.0
+mkdocstrings[python]>=0.22.0
+
+# ── API Development ─────────────────────────────────────────────────────────
+# API testing
+httpie>=3.2.0
+
+# OpenAPI/Swagger
+openapi-spec-validator>=0.6.0
+
+# ── Database Tools ──────────────────────────────────────────────────────────
+# Database inspection
+sqlalchemy>=2.0.0  # If using SQL databases
+
+# ── Monitoring & Logging ────────────────────────────────────────────────────
+# Better logging
+colorlog>=6.7.0
+loguru>=0.7.0
+
+# Performance monitoring
+py-spy>=0.3.14
+
+# ── Utilities ───────────────────────────────────────────────────────────────
+# Environment management
+python-decouple>=3.8
+
+# Data validation
+jsonschema>=4.19.0
+
+# HTTP mocking
+responses>=0.23.0
+
+# Fake data generation
+faker>=19.0.0
+
+# ── Pre-commit Hooks ────────────────────────────────────────────────────────
+pre-commit>=3.3.0
+
+# ============================================================================
+# Installation
+# ============================================================================
+#
+# Install development dependencies:
+#   pip install -r requirements-dev.txt
+#
+# Setup pre-commit hooks:
+#   pre-commit install
+#
+# Run tests:
+#   pytest tests/
+#
+# Run with coverage:
+#   pytest --cov=src tests/
+#
+# Format code:
+#   black .
+#   isort .
+#
+# Lint code:
+#   flake8 src/
+#   pylint src/
+#   mypy src/
+#
+# Security check:
+#   bandit -r src/
+#   safety check
+#
+# ============================================================================
