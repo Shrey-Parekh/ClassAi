@@ -302,7 +302,8 @@ Write only the sentence, nothing else."""
                 return [
                     {
                         "chunk_id": point.id,
-                        "text": point.payload.get("content", ""),
+                        # Handle both Faculty chunks (content) and Student chunks (page_content)
+                        "text": point.payload.get("content") or point.payload.get("page_content", ""),
                         "score": 1.0,
                         "metadata": point.payload,
                     }

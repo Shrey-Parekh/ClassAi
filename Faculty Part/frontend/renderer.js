@@ -5,7 +5,7 @@
  */
 
 class ResponseRenderer {
-    render(structured) {
+    render(structured, sources = []) {
         if (structured.confidence === "none" || structured.fallback) {
             return this.renderFallback(structured.fallback);
         }
@@ -32,13 +32,56 @@ class ResponseRenderer {
         });
 
         if (structured.footer) {
-            const p = document.createElement("p");
-            p.className = "response-footer";
-            p.textContent = structured.footer;
-            container.appendChild(p);
+            container.appendChild(this.renderFooter(structured.footer, sources));
         }
 
         return container;
+    }
+    
+    renderFooter(footerText, sources = []) {
+        const p = document.createElement("p");
+        p.className = "response-footer";
+        
+        // Parse footer text to identify source names and add collection tags
+        // Footer format: "Based on: Source1, Source2, Source3"
+        if (footerText.startsWith("Based on:")) {
+            const prefix = "Based on: ";
+            p.appendChild(document.createTextNode(prefix));
+            
+            const sourcesText = footerText.substring(prefix.length);
+            const sourceNames = sourcesText.split(",").map(s => s.trim());
+            
+            sourceNames.forEach((sourceName, index) => {
+                // Find matching source in sources array to get collection info
+                const sourceInfo = sources.find(s => 
+                    s.title === sourceName || 
+                    s.document_name === sourceName ||
+                    sourceName.includes(s.title) ||
+                    sourceName.includes(s.document_name)
+                );
+                
+                // Add source name
+                p.appendChild(document.createTextNode(sourceName));
+                
+                // Add collection tag if available
+                if (sourceInfo && sourceInfo.source_collection) {
+                    const tag = document.createElement("span");
+                    tag.className = `source-collection-tag source-collection-tag--${sourceInfo.source_collection}`;
+                    tag.textContent = sourceInfo.source_collection;
+                    p.appendChild(tag);
+                }
+                
+                // Add comma separator if not last item
+                if (index < sourceNames.length - 1) {
+                    p.appendChild(document.createTextNode(", "));
+                }
+            });
+        } else {
+            // Fallback: just render as text
+            p.textContent = footerText;
+        }
+        
+        return p;
     }
 
     renderSection(section) {

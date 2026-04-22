@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+*.egg-info/
+dist/
+build/
+
+# Qdrant
+qdrant_db/
+
+# Data
+data/index/
+*.pdf
+
+# Keep sample markdown files but ignore user-added ones
+# (You can customize this based on your needs)
+
+# Old directories
+Syllabus/
+Question Papers/
+Question Papers ALL/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+
+# Logs
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Streamlit
+.streamlit/
+
+# Test outputs
+test_output/

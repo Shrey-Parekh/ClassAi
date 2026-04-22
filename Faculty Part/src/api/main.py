@@ -20,7 +20,7 @@ load_dotenv()
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..retrieval.pipeline import RetrievalPipeline
+from ..retrieval.scope_router import ScopeRouter
 from ..generation.answer_generator import AnswerGenerator
 from ..utils.vector_db import VectorDBClient
 from ..utils.query_embedder import QueryEmbedder
@@ -78,6 +78,7 @@ class QueryRequest(BaseModel):
     top_k: Optional[int] = 5
     session_id: Optional[str] = None
     stream: Optional[bool] = False
+    scope: Optional[str] = None  # "student", "faculty", "both" (for faculty/admin only)
     format_override: Optional[Dict[str, str]] = None  # {"verbosity": "...", "structure": "..."}
 
 
@@ -104,22 +105,23 @@ class QueryResponse(BaseModel):
 
 
 # Initialize components (in production, use dependency injection)
-retrieval_pipeline = None
+scope_router = None
 answer_generator = None
 cache_manager = None
 conversation_manager = None
 rate_limiter = None
 llm_semaphore = None  # Limit concurrent LLM calls
+active_tokens = {}  # Store active session tokens with role info
 
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize RAG components on startup."""
-    global retrieval_pipeline, answer_generator, cache_manager, conversation_manager, rate_limiter, llm_semaphore
+    global scope_router, answer_generator, cache_manager, conversation_manager, rate_limiter, llm_semaphore
     
     try:
         # Initialize components
-        print("Initializing Faculty Part RAG system...")
+        print("Initializing ClassAI Unified RAG system...")
         
         # Initialize rate limiter (20 req/min per IP)
         rate_limiter = RateLimiter(max_requests=20, window_seconds=60)
@@ -143,33 +145,56 @@ async def startup_event():
         query_embedder = QueryEmbedder(model_name="BAAI/bge-m3")
         llm_client = LLMClient()
         
-        # Create collection if it doesn't exist
+        # Get collection names from environment
+        faculty_collection = os.getenv("FACULTY_COLLECTION_NAME", "faculty_chunks")
+        student_collection = os.getenv("STUDENT_COLLECTION_NAME", "academic_rag")
+        
+        # Create collections if they don't exist
         try:
             vector_db.create_collection(
+                collection_name=faculty_collection,
+                vector_size=query_embedder.get_dimension()
+            )
+            vector_db.create_collection(
+                collection_name=student_collection,
                 vector_size=query_embedder.get_dimension()
             )
         except Exception as e:
             print(f"Collection already exists or creation failed: {e}")
         
-        # Initialize retrieval pipeline
-        retrieval_pipeline = RetrievalPipeline(
+        # Initialize scope router with two pipelines
+        print(f"Initializing scope router...")
+        print(f"  Faculty collection: {faculty_collection}")
+        print(f"  Student collection: {student_collection}")
+        
+        scope_router = ScopeRouter(
             vector_db_client=vector_db,
             embedding_model=query_embedder,
-            llm_client=llm_client
+            llm_client=llm_client,
+            faculty_collection_name=faculty_collection,
+            student_collection_name=student_collection
         )
         
-        # Build BM25 index for hybrid search (with persistence)
-        print("Loading BM25 index...")
+        # Build BM25 indexes for both collections
+        print("Loading BM25 indexes...")
         try:
-            retrieval_pipeline.search_engine.build_bm25_index()
-            print("✓ BM25 index ready")
+            scope_router.faculty_pipeline.search_engine.build_bm25_index()
+            print(f"✓ Faculty BM25 index ready")
         except Exception as e:
-            print(f"⚠ BM25 index build failed (will use dense search only): {e}")
+            print(f"⚠ Faculty BM25 index build failed: {e}")
+        
+        try:
+            scope_router.student_pipeline.search_engine.build_bm25_index()
+            print(f"✓ Student BM25 index ready")
+        except Exception as e:
+            print(f"⚠ Student BM25 index build failed: {e}")
         
         # Initialize answer generator
         answer_generator = AnswerGenerator(llm_client)
         
-        print("✓ Faculty Part API started successfully")
+        print("✓ ClassAI Unified API started successfully")
+        print(f"  Collections: {faculty_collection}, {student_collection}")
+        print(f"  Role-based access control enabled")
         
     except Exception as e:
         print(f"✗ Failed to initialize: {e}")
@@ -229,6 +254,13 @@ async def signin(request: SignInRequest):
     import secrets
     token = secrets.token_urlsafe(32)
     
+    # Store token with role info for later validation
+    active_tokens[token] = {
+        "email": email,
+        "role": user_data["role"],
+        "name": user_data["name"]
+    }
+    
     return SignInResponse(
         token=token,
         role=user_data["role"],
@@ -242,31 +274,54 @@ async def signin(request: SignInRequest):
 @app.post("/query", response_model=QueryResponse)
 async def query_faculty_resources(request: QueryRequest, req: Request):
     """
-    Query faculty resources using semantic RAG with structured JSON output.
+    Query resources using semantic RAG with role-based scope routing.
     
     Pipeline:
-    1. Rate limiting check
-    2. Check cache for recent identical queries
-    3. Intent classification
-    4. Hybrid search (vector + BM25)
-    5. Cross-encoder reranking
-    6. Intent-based chunk limiting
-    7. Structured JSON generation (with LLM semaphore)
-    8. Save to conversation history
+    1. Extract role from Authorization header (server-side source of truth)
+    2. Enforce scope based on role (student → student only)
+    3. Rate limiting check
+    4. Check cache for recent identical queries
+    5. Scope-based retrieval (student/faculty/both collections)
+    6. Structured JSON generation (with LLM semaphore)
+    7. Save to conversation history
     """
+    # ── Extract role from Authorization header ──────────────────────
+    auth_header = req.headers.get("Authorization", "")
+    token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
+    
+    # Debug: Log token info
+    print(f"[AUTH] Authorization header present: {bool(auth_header)}")
+    print(f"[AUTH] Token extracted: {token[:20] if token else 'None'}...")
+    print(f"[AUTH] Token in active_tokens: {token in active_tokens if token else False}")
+    if token and token in active_tokens:
+        print(f"[AUTH] Token data: {active_tokens[token]}")
+    
+    # Get role from server-side token storage (A2: never trust client)
+    if token and token in active_tokens:
+        role = active_tokens[token]["role"]
+    else:
+        # No valid token → default to most restrictive (student)
+        role = "student"
+        print(f"[AUTH] No valid token, defaulting to role=student")
+    
     # ── Sanitize and log query ──────────────────────────────────────
     import re
     raw_query = request.query or ""
     query = re.sub(r'\s+', ' ', raw_query).strip()
     
+    # Get scope from request (will be enforced by ScopeRouter)
+    scope = request.scope or "both"
+    
     print(f"\n{'='*50}")
     print(f"[QUERY] Raw: '{raw_query[:80]}'")
     print(f"[QUERY] Clean: '{query[:80]}'")
+    print(f"[QUERY] Role: {role}")
+    print(f"[QUERY] Scope (requested): {scope}")
     print(f"[QUERY] Session: {request.session_id}")
     print(f"[QUERY] Stream: {request.stream}")
     print(f"{'='*50}")
     
-    if not retrieval_pipeline or not answer_generator:
+    if not scope_router or not answer_generator:
         raise HTTPException(
             status_code=503,
             detail="RAG system not initialized. Check server logs."
@@ -312,14 +367,16 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     
     # Handle streaming request
     if request.stream:
+        # Pass role through request metadata (not ideal but works for demo)
+        # In production, use proper context/dependency injection
         return StreamingResponse(
-            stream_query_response(request),
+            stream_query_response(request, role, scope),
             media_type="text/event-stream"
         )
     
     try:
         # Check cache first
-        cached_result = cache_manager.get_query_result(request.query, request.top_k or 15)
+        cached_result = cache_manager.get_query_result(request.query, request.top_k or 20)
         if cached_result:
             print(f"Cache hit for query: {request.query[:50]}...")
             
@@ -345,11 +402,13 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         
         print(f"[PIPELINE] Starting retrieval for: {request.query[:50]}...")
         
-        # Retrieve relevant chunks
+        # Retrieve relevant chunks using scope router
         retrieval_result = await asyncio.to_thread(
-            retrieval_pipeline.retrieve,
+            scope_router.retrieve,
             query=request.query,
-            top_k=request.top_k or 15
+            role=role,
+            scope=scope,
+            top_k=request.top_k or 20
         )
         
         print(f"[PIPELINE] Retrieval complete. Found {len(retrieval_result['chunks'])} chunks")
@@ -464,7 +523,7 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         }
         
         # Cache the result
-        cache_manager.set_query_result(request.query, request.top_k or 15, result, ttl=3600)
+        cache_manager.set_query_result(request.query, request.top_k or 20, result, ttl=3600)
         
         # Add to conversation history
         if request.session_id:
@@ -512,21 +571,30 @@ async def health_check():
     
     return {
         "status": "healthy",
-        "service": "ClassAI Faculty Part",
+        "service": "ClassAI Unified",
         "version": "0.1.0",
         "components": {
-            "retrieval_pipeline": retrieval_pipeline is not None,
+            "scope_router": scope_router is not None,
             "answer_generator": answer_generator is not None,
             "cache_manager": cache_manager is not None,
             "conversation_manager": conversation_manager is not None,
+        },
+        "collections": {
+            "faculty": os.getenv("FACULTY_COLLECTION_NAME", "faculty_chunks"),
+            "student": os.getenv("STUDENT_COLLECTION_NAME", "academic_rag")
         },
         "cache_stats": cache_stats
     }
 
 
-async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
+async def stream_query_response(request: QueryRequest, role: str, scope: str) -> AsyncIterator[str]:
     """
     Stream query response as Server-Sent Events.
+    
+    Args:
+        request: Query request
+        role: User role (from token)
+        scope: Scope preference
     
     Yields:
         SSE formatted events with progressive response
@@ -539,7 +607,7 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         await asyncio.sleep(0.1)
         
         # Check cache
-        cached_result = cache_manager.get_query_result(request.query, request.top_k or 15)
+        cached_result = cache_manager.get_query_result(request.query, request.top_k or 20)
         if cached_result:
             print(f"[SSE] Cache hit")
             yield f"event: status\ndata: {json.dumps({'step': 'cache_hit', 'message': 'Found cached result'})}\n\n"
@@ -552,9 +620,11 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         yield f"event: status\ndata: {json.dumps({'step': 'retrieval', 'message': 'Searching knowledge base...'})}\n\n"
         
         retrieval_result = await asyncio.to_thread(
-            retrieval_pipeline.retrieve,
+            scope_router.retrieve,
             query=request.query,
-            top_k=request.top_k or 15
+            role=role,
+            scope=scope,
+            top_k=request.top_k or 20
         )
         
         print(f"[SSE] Retrieval complete: {len(retrieval_result['chunks'])} chunks")
@@ -612,7 +682,7 @@ async def stream_query_response(request: QueryRequest) -> AsyncIterator[str]:
         }
         
         # Cache it
-        cache_manager.set_query_result(request.query, request.top_k or 15, result, ttl=3600)
+        cache_manager.set_query_result(request.query, request.top_k or 20, result, ttl=3600)
         
         # Add to conversation
         if request.session_id:

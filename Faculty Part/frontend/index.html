@@ -225,12 +225,22 @@
             
             document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
             
-            // Hero runs on load (not scroll)
+            // Hero entrance animation on page load
             requestAnimationFrame(() => {
+                // Animate hero text elements with stagger
                 document.querySelectorAll('.hero-reveal').forEach((el, i) => {
-                    el.style.transitionDelay = (i * 80) + 'ms';
-                    el.classList.add('reveal--in');
+                    setTimeout(() => {
+                        el.classList.add('reveal--in');
+                    }, i * 100);
                 });
+                
+                // Animate hero sidekick after text
+                setTimeout(() => {
+                    const sidekick = document.querySelector('.hero-sidekick');
+                    if (sidekick) {
+                        sidekick.classList.add('reveal--in');
+                    }
+                }, 500);
             });
         })();
     </script>

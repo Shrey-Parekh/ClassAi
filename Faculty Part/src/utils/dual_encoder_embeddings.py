@@ -47,6 +47,11 @@ class DualEncoderEmbeddings:
         
         # Load model
         try:
+            # Force offline mode to use cached model (avoid HuggingFace connection issues)
+            import os
+            os.environ['HF_HUB_OFFLINE'] = '1'
+            os.environ['TRANSFORMERS_OFFLINE'] = '1'
+            
             device = "cuda" if torch.cuda.is_available() else "cpu"
             self.model = SentenceTransformer(model_name, device=device)
             self.logger.info(f"✓ Encoder loaded: {model_name} on {device}")

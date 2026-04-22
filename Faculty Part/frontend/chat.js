@@ -11,6 +11,37 @@ const mobileMenuToggle  = document.getElementById('mobileMenuToggle');
 const sidebar           = document.getElementById('sidebar');
 const mobileBackdrop    = document.getElementById('mobileBackdrop');
 const modelIdEl         = document.getElementById('modelId');
+const scopeSelector     = document.getElementById('scopeSelector');
+
+// ── Scope management (faculty/admin only) ─────────────────────────────────────
+let currentScope = 'both'; // Default scope
+
+// Initialize scope selector based on role
+const role = sessionStorage.getItem('classai_role') || '';
+if (scopeSelector && (role === 'faculty' || role === 'admin')) {
+    // Show scope selector for faculty/admin
+    scopeSelector.style.display = 'block';
+    
+    // Handle scope pill clicks
+    const scopePills = scopeSelector.querySelectorAll('.scope-pill');
+    scopePills.forEach(pill => {
+        pill.addEventListener('click', () => {
+            // Remove active class from all pills
+            scopePills.forEach(p => p.classList.remove('scope-pill--active'));
+            // Add active class to clicked pill
+            pill.classList.add('scope-pill--active');
+            // Update current scope
+            currentScope = pill.getAttribute('data-scope');
+            console.log('Scope changed to:', currentScope);
+        });
+    });
+} else {
+    // Hide scope selector for students
+    if (scopeSelector) {
+        scopeSelector.style.display = 'none';
+    }
+    currentScope = 'student'; // Force student scope
+}
 
 // ── Mobile sidebar ────────────────────────────────────────────────────────────
 if (mobileMenuToggle && sidebar && mobileBackdrop) {
@@ -64,10 +95,48 @@ async function initSession() {
 }
 
 // ── Role display ──────────────────────────────────────────────────────────────
-const role = sessionStorage.getItem('classai_role') || '';
 if (roleLabel && role) {
     roleLabel.textContent = role.charAt(0).toUpperCase() + role.slice(1);
 }
+
+// ── Token validation ──────────────────────────────────────────────────────────
+// Validate token on page load - if invalid, redirect to login
+async function validateToken() {
+    const token = sessionStorage.getItem('classai_token');
+    if (!token) {
+        window.location.href = 'signin.html';
+        return false;
+    }
+    
+    try {
+        // Make a lightweight request to check if token is valid
+        const res = await fetch(`${API_URL}/conversation/new`, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            }
+        });
+        
+        if (res.status === 401) {
+            alert('Your session has expired. Please login again.');
+            window.location.href = 'signin.html';
+            return false;
+        }
+        
+        return true;
+    } catch (err) {
+        console.error('Token validation failed:', err);
+        return true; // Allow to continue on network errors
+    }
+}
+
+// Validate token before initializing
+validateToken().then(valid => {
+    if (valid) {
+        initSession();
+    }
+});
 
 // ── Textarea auto-resize (A20: capped at 200px) ───────────────────────────────
 userInput.addEventListener('input', function () {
@@ -226,11 +295,22 @@ async function sendQuery(query) {
     currentAbortController = new AbortController();
     const thinkingBlock = showThinking();
 
+    // Get token for Authorization header
+    const token = sessionStorage.getItem('classai_token');
+
     try {
         const response = await fetch(`${API_URL}/query`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query, session_id: currentSessionId, stream: true }),
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': token ? `Bearer ${token}` : ''
+            },
+            body: JSON.stringify({ 
+                query, 
+                session_id: currentSessionId, 
+                stream: true,
+                scope: currentScope  // Include scope in request
+            }),
             signal: currentAbortController.signal
         });
 
@@ -284,7 +364,9 @@ async function sendQuery(query) {
         }
 
         if (structured) {
-            const rendered = renderer.render(structured);
+            // Pass sources array to renderer for collection tags
+            const sources = finalResult.sources || [];
+            const rendered = renderer.render(structured, sources);
             contentDiv.appendChild(rendered);
         } else {
             contentDiv.textContent = finalResult.answer || 'No response received.';
@@ -295,6 +377,16 @@ async function sendQuery(query) {
             removeThinking();
         } else {
             removeThinking();
+            
+            // Check for authentication errors (401 or invalid token)
+            const msg = (err.message || '').toLowerCase();
+            if (msg.includes('401') || msg.includes('unauthorized')) {
+                // Token is invalid (likely server restart) - redirect to login
+                alert('Your session has expired. Please login again.');
+                window.location.href = 'signin.html';
+                return;
+            }
+            
             const { contentDiv } = addMessage('', false);
             // A21: structured error display
             const errorDiv = document.createElement('div');
@@ -304,7 +396,6 @@ async function sendQuery(query) {
             h.style.color = '#ef4444';
             const p = document.createElement('p');
             p.className = 'section-paragraph';
-            const msg = (err.message || '').toLowerCase();
             if (msg.includes('429') || msg.includes('rate limit')) {
                 h.textContent = 'Rate Limit Reached';
                 p.textContent = 'Too many requests. Please wait a moment and try again.';
@@ -466,7 +557,7 @@ async function copyMessage(contentDiv, button, statusEl) {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-initSession();
+// Session initialization is now handled by validateToken() above
 
 // Welcome screen reveal animation
 requestAnimationFrame(() => {

@@ -71,8 +71,8 @@ class HybridSearchEngine:
         self.bm25_corpus = []
         self.bm25_ids = []
         
-        # BM25 persistence manager
-        self.bm25_persistence = BM25PersistenceManager()
+        # BM25 persistence manager (namespaced by collection)
+        self.bm25_persistence = BM25PersistenceManager(collection_name=collection_name)
         
         # Thread safety for BM25 operations
         self._bm25_lock = threading.Lock()
@@ -198,7 +198,8 @@ class HybridSearchEngine:
             return [
                 SearchResult(
                     chunk_id=hit.id,
-                    content=hit.payload.get("content", ""),
+                    # Handle both Faculty chunks (content) and Student chunks (page_content)
+                    content=hit.payload.get("content") or hit.payload.get("page_content", ""),
                     score=hit.score,
                     metadata=hit.payload,
                     source="dense"
@@ -250,7 +251,8 @@ class HybridSearchEngine:
             self.bm25_ids = []
             
             for point in all_points:
-                content = point.payload.get("content", "")
+                # Handle both Faculty chunks (content) and Student chunks (page_content)
+                content = point.payload.get("content") or point.payload.get("page_content", "")
                 if content:
                     # Tokenize for BM25 with punctuation handling
                     tokens = self._tokenize(content)
@@ -319,7 +321,8 @@ class HybridSearchEngine:
                         
                         results.append(SearchResult(
                             chunk_id=chunk_id,
-                            content=point.payload.get("content", ""),
+                            # Handle both Faculty chunks (content) and Student chunks (page_content)
+                            content=point.payload.get("content") or point.payload.get("page_content", ""),
                             score=float(scores[idx]),
                             metadata=point.payload,
                             source="sparse"

@@ -131,16 +131,29 @@ class VectorDBClient:
         if query_filter:
             qdrant_filter = self._build_filter(query_filter)
         
-        # Use search() method for qdrant-client 1.9.0
-        results = self.client.search(
-            collection_name=collection_name,
-            query_vector=query_vector,
-            limit=limit,
-            query_filter=qdrant_filter,
-            score_threshold=score_threshold
-        )
-        
-        return results
+        # Use query_points for qdrant-client 1.9.0
+        # The search() method was renamed to query_points()
+        try:
+            results = self.client.query_points(
+                collection_name=collection_name,
+                query=query_vector,
+                limit=limit,
+                query_filter=qdrant_filter,
+                score_threshold=score_threshold,
+                with_payload=True,
+                with_vectors=False
+            )
+            return results.points if hasattr(results, 'points') else results
+        except AttributeError:
+            # Fallback for older API
+            results = self.client.search(
+                collection_name=collection_name,
+                query_vector=query_vector,
+                limit=limit,
+                query_filter=qdrant_filter,
+                score_threshold=score_threshold
+            )
+            return results
     
     def get_collection_info(self, collection_name: str = None) -> Dict[str, Any]:
         """Get information about a collection."""

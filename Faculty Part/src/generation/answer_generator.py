@@ -590,13 +590,43 @@ class AnswerGenerator:
         Build numbered context string from retrieved chunks.
         
         Each chunk is numbered [N] so the LLM can reference sources.
+        Handles both Faculty and Student chunk metadata gracefully.
         """
         context_parts = []
 
         for i, chunk in enumerate(chunks, 1):
-            content = chunk.get("text", "")
-            doc_name = chunk.get("metadata", {}).get("document_name", "Unknown Document")
-            section = chunk.get("metadata", {}).get("section_title", "")
+            # Try multiple possible content keys (Faculty vs Student chunks)
+            content = (
+                chunk.get("text") or 
+                chunk.get("content") or 
+                chunk.get("chunk_text") or
+                chunk.get("payload", {}).get("text") or 
+                chunk.get("payload", {}).get("content") or
+                ""
+            )
+            
+            metadata = chunk.get("metadata", {})
+            
+            # Try multiple possible document name keys
+            # Faculty chunks: document_name
+            # Student chunks: source, subject, course_name
+            doc_name = (
+                metadata.get("document_name") or
+                metadata.get("source") or
+                metadata.get("subject") or
+                metadata.get("course_name") or
+                "Unknown Document"
+            )
+            
+            # Try multiple possible section keys
+            # Faculty chunks: section_title
+            # Student chunks: unit_name, question_id
+            section = (
+                metadata.get("section_title") or
+                metadata.get("unit_name") or
+                metadata.get("question_id") or
+                ""
+            )
 
             source_header = f"[{i}] Source: {doc_name}"
             if section:
@@ -607,18 +637,41 @@ class AnswerGenerator:
         return "\n\n---\n\n".join(context_parts)
     
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-        """Extract source document information from chunks."""
+        """
+        Extract source document information from chunks.
+        Handles both Faculty and Student chunk metadata gracefully.
+        """
         sources = []
         seen_docs = set()
         
         for chunk in chunks:
             metadata = chunk.get("metadata", {})
-            doc_id = metadata.get("doc_id")
+            
+            # Try multiple possible ID keys
+            # Faculty chunks: doc_id
+            # Student chunks: source, filepath, or generate from source
+            doc_id = (
+                metadata.get("doc_id") or
+                metadata.get("source") or
+                metadata.get("filepath") or
+                metadata.get("subject", "unknown")
+            )
             
             if doc_id and doc_id not in seen_docs:
+                # Try multiple possible title keys
+                # Faculty chunks: title
+                # Student chunks: subject, course_name, source
+                title = (
+                    metadata.get("title") or
+                    metadata.get("subject") or
+                    metadata.get("course_name") or
+                    metadata.get("source") or
+                    "Unknown Document"
+                )
+                
                 sources.append({
                     "doc_id": doc_id,
-                    "title": metadata.get("title", "Unknown Document"),
+                    "title": title,
                     "date": metadata.get("date", ""),
                     "applies_to": metadata.get("applies_to", ""),
                 })

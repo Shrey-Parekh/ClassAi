@@ -1,0 +1,304 @@
+# ============================================================================
+# ClassAI Project .gitignore
+# ============================================================================
+
+# ── Python ──────────────────────────────────────────────────────────────────
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# Environments
+.env
+.env.local
+.env.*.local
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# ── Sensitive Data ──────────────────────────────────────────────────────────
+# Environment files with secrets
+*.env
+!.env.example
+.env.production
+.env.development
+.env.test
+
+# API keys and credentials
+**/secrets/
+**/credentials/
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ── Application Data ────────────────────────────────────────────────────────
+# Vector Database Storage
+**/qdrant_storage/
+**/qdrant_db/
+*.qdrant
+
+# BM25 Index Cache
+**/bm25_index/*.pkl
+**/bm25_index/*.txt
+!**/bm25_index/.gitkeep
+
+# Cache directories
+**/cache/
+**/.cache/
+*.cache
+
+# Conversation history
+**/conversations/*.json
+!**/conversations/.gitkeep
+
+# Logs
+**/logs/*.log
+**/logs/*.jsonl
+!**/logs/.gitkeep
+*.log
+*.jsonl
+
+# Processed data
+**/data/processed/*
+!**/data/processed/.gitkeep
+
+# Raw documents (PDFs, large files)
+**/data/raw/*.pdf
+**/data/raw/*.docx
+**/data/raw/*.xlsx
+!**/data/raw/.gitkeep
+
+# Embeddings and model cache
+embedding_log.jsonl
+**/embeddings/
+**/model_cache/
+
+# ── Machine Learning Models ─────────────────────────────────────────────────
+# Hugging Face cache
+.huggingface/
+**/models/
+**/checkpoints/
+*.bin
+*.safetensors
+*.onnx
+*.pt
+*.pth
+*.h5
+*.pkl
+*.joblib
+
+# Sentence Transformers cache
+**/sentence_transformers/
+
+# ── IDEs and Editors ────────────────────────────────────────────────────────
+# VSCode
+.vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+*.swp
+*.swo
+*~
+.vim/
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ── Operating System ────────────────────────────────────────────────────────
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ── Docker ──────────────────────────────────────────────────────────────────
+# Docker volumes
+**/docker-volumes/
+**/volumes/
+
+# Docker compose override
+docker-compose.override.yml
+
+# ── Node.js (if using any JS tooling) ───────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# ── Temporary Files ─────────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*_backup
+*_old
+*.orig
+
+# ── Build Artifacts ─────────────────────────────────────────────────────────
+*.o
+*.a
+*.lib
+*.dll
+*.exe
+*.out
+*.app
+
+# ── Database ────────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# ── Misc ────────────────────────────────────────────────────────────────────
+# Thumbnails
+*.thumb
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Large media files (unless needed)
+*.mp4
+*.avi
+*.mov
+*.wmv
+*.flv
+
+# ── Project Specific ────────────────────────────────────────────────────────
+# Test outputs
+test_output/
+test_results/
+
+# Debug files
+debug/
+*.debug
+
+# Profiling data
+*.prof
+*.lprof
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Benchmark results
+benchmark_results/
+
+# Generated documentation
+docs/_build/
+docs/.doctrees/
+
+# ── Keep These Files ────────────────────────────────────────────────────────
+# Keep example files
+!.env.example
+!config.example.json
+!metadata.example.json
+
+# Keep .gitkeep files
+!.gitkeep
+
+# Keep README files
+!README.md
+!*/README.md
+
+# Keep requirements files
+!requirements.txt
+!*/requirements.txt
+
+# Keep docker files
+!Dockerfile
+!docker-compose.yml
+!.dockerignore
+
+# ── Exceptions ──────────────────────────────────────────────────────────────
+# Allow specific files if needed
+# !specific_file.pdf
+# !important_data.json
