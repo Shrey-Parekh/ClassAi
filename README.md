@@ -1,435 +1,199 @@
-# ClassAI - NMIMS Knowledge Assistant
+# ClassAI
 
-> AI-powered institutional knowledge assistant with role-scoped RAG for faculty and students
+ClassAI is a question-answering assistant for NMIMS. Faculty can ask about
+institutional policies and guidelines, and students can ask about syllabi and
+past question papers. Every answer is grounded in the source documents and
+cites them.
 
-ClassAI is a production-ready RAG (Retrieval-Augmented Generation) system that provides instant access to NMIMS institutional knowledge including policies, syllabi, question papers, and academic guidelines. Built with hybrid search, cross-encoder reranking, and role-based access control.
+It runs fully on a local machine. Qdrant stores the vectors, Ollama serves the
+language model, and a FastAPI backend handles retrieval, generation, sign-in
+and the web UI.
 
-## 🎯 Features
+## How it works
 
-### Core Capabilities
-- **Hybrid RAG System**: Dense (semantic) + BM25 (keyword) + BGE cross-encoder reranking
-- **Role-Based Access Control**: Student, Faculty, and Admin roles with scoped data access
-- **Multi-Collection Support**: Separate collections for faculty resources and student materials
-- **Structured JSON Responses**: Formatted answers with citations and source links
-- **Conversation History**: Session-based chat with context preservation
-- **Query Intelligence**: Automatic abbreviation expansion, intent detection, and query understanding
+1. **Ingestion.** Faculty PDFs and student Markdown files are chunked,
+   embedded with `BAAI/bge-m3`, and stored in two Qdrant collections:
+   `faculty_chunks` and `academic_rag`.
+2. **Routing.** Each query is normalised, abbreviations such as *ML* and *CS*
+   are expanded, and its intent is detected. The user's role decides which
+   collections it may search.
+3. **Retrieval.** Dense vector search and BM25 run in parallel. Results are
+   merged with reciprocal rank fusion and then reranked with
+   `BAAI/bge-reranker-v2-m3`.
+4. **Generation.** The top chunks go to the LLM (`gemma3:12b` via Ollama by
+   default). The LLM returns a structured answer with sources, streamed to the
+   browser over Server-Sent Events.
 
-### Advanced Features
-- **Metadata Filtering**: Comprehensive listing queries (e.g., "list all units in ML")
-- **Abbreviation Expansion**: CS → Cyber Security, ML → Machine Learning, etc.
-- **Scope Selection**: Query student/faculty/both collections simultaneously
-- **Source Attribution**: Every answer includes document references
-- **Caching**: Query result caching for improved performance
-- **Rate Limiting**: Per-IP request throttling
+### Roles
 
-## 🏗️ Architecture
+| Role    | Can search                                        |
+|---------|---------------------------------------------------|
+| Student | Student collection only                           |
+| Faculty | Faculty, student, or both, chosen in the UI       |
+| Admin   | Everything                                        |
+
+## Repository layout
 
 ```
 ClassAI/
-├── Faculty Part/          # Main application (runtime + faculty data)
+├── Faculty Part/            Main application: API, retrieval, web UI
 │   ├── src/
-│   │   ├── api/          # FastAPI endpoints
-│   │   ├── retrieval/    # Hybrid search + reranking
-│   │   ├── generation/   # LLM answer generation
-│   │   ├── ingestion/    # Document processing pipeline
-│   │   └── utils/        # Shared utilities
-│   ├── frontend/         # Web UI (HTML/CSS/JS)
-│   ├── data/            # Faculty documents (PDFs)
-│   └── docker-compose.yml
+│   │   ├── api/             FastAPI app and routes
+│   │   ├── chunking/        Structure-aware document chunker
+│   │   ├── ingestion/       PDF processing pipeline
+│   │   ├── retrieval/       Hybrid search, reranker, scope router
+│   │   ├── generation/      Prompting and answer formatting
+│   │   └── utils/           Embeddings, Qdrant client, cache, rate limiting
+│   ├── frontend/            Sign-in and chat pages (plain HTML/CSS/JS)
+│   ├── config/              Chunking and retrieval settings
+│   ├── scripts/             Ingestion and maintenance scripts
+│   ├── eval/                Golden queries and retrieval metrics
+│   ├── tests/
+│   └── docker-compose.yml   Qdrant
 │
-└── Student Part/         # Student data ingestion only
-    ├── ingest/          # LangChain-based indexing
-    ├── data/
-    │   ├── syllabus/    # Course syllabi (Markdown)
-    │   └── question_papers/  # Exam papers (Markdown)
-    └── .env
+├── Student Part/            Ingestion for syllabi and question papers
+│   ├── ingest/              Markdown extraction, chunking, indexing
+│   ├── data/
+│   │   ├── syllabus/
+│   │   └── question_papers/
+│   └── scripts/
+│
+├── requirements.txt         Shared dependencies for both parts
+├── requirements-dev.txt
+├── requirements-prod.txt
+└── INSTALL.md               Detailed setup and troubleshooting
 ```
 
-### Technology Stack
+## Getting started
 
-**Backend:**
-- FastAPI (API server)
-- Qdrant (vector database)
-- BAAI/bge-m3 (embeddings, 1024-dim)
-- BAAI/bge-reranker-v2-m3 (cross-encoder)
-- Ollama Gemma3:12b (LLM)
-- BM25Okapi (sparse retrieval)
+### Requirements
 
-**Frontend:**
-- Vanilla JavaScript (no framework)
-- Server-Sent Events (streaming)
-- Responsive design with accessibility
+- Python 3.10 or newer
+- Docker, for Qdrant
+- [Ollama](https://ollama.com)
+- About 16 GB of RAM. A CUDA GPU is optional but makes embedding much faster.
 
-**Data Processing:**
-- PyMuPDF (PDF extraction)
-- LangChain (student data chunking)
-- Sentence Transformers (embeddings)
-
-## 🚀 Quick Start
-
-### Prerequisites
+### 1. Install dependencies
 
 ```bash
-# Required
-- Python 3.10+
-- Docker & Docker Compose
-- Ollama (for LLM)
-- 8GB+ RAM
-- 10GB+ disk space
-
-# Optional
-- CUDA-capable GPU (for faster embeddings)
+git clone https://github.com/Shrey-Parekh/ClassAi.git
+cd ClassAi
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-### 1. Clone Repository
-
-```bash
-git clone <repository-url>
-cd ClassAI
-```
-
-### 2. Start Infrastructure
+### 2. Start Qdrant and pull the models
 
 ```bash
 cd "Faculty Part"
-docker-compose up -d
-```
+docker compose up -d
 
-This starts:
-- Qdrant vector database (port 6333)
-- Qdrant dashboard (port 6334)
-
-### 3. Install Ollama & Pull Model
-
-```bash
-# Install Ollama from https://ollama.ai
 ollama pull gemma3:12b
 ollama pull bge-m3
 ```
 
-### 4. Install Python Dependencies
+### 3. Configure
 
 ```bash
-# Faculty Part
-cd "Faculty Part"
-pip install -r requirements.txt
-
-# Student Part (for data ingestion)
-cd "../Student Part"
-pip install -r requirements.txt
+cp "Faculty Part/.env.example" "Faculty Part/.env"
+cp "Student Part/.env.example" "Student Part/.env"
 ```
 
-### 5. Configure Environment
+The defaults point at a local Qdrant and Ollama. The one thing you must set is
+the sign-in accounts in `Faculty Part/.env`. Each account uses the format
+`email:bcrypt_hash:role:name`. To generate a hash:
 
 ```bash
-# Faculty Part/.env
-cp .env.example .env
-# Edit .env with your settings (defaults work for local development)
-
-# Student Part/.env
-cp .env.example .env
-# Edit .env (should point to same Qdrant instance)
+python -c "import bcrypt; print(bcrypt.hashpw(b'your-password', bcrypt.gensalt()).decode())"
 ```
 
-### 6. Index Documents
+### 4. Index the documents
 
-**Index Faculty Documents:**
+Faculty documents are PDFs in `Faculty Part/data/raw/`. They are not tracked
+in git. Describe each file in `data/metadata.json`, using
+`metadata.example.json` as the template.
+
 ```bash
 cd "Faculty Part"
-python scripts/ingest_new.py
+python scripts/ingest_new.py --input data/raw --metadata data/metadata.json
 ```
 
-**Index Student Documents:**
+Student documents are Markdown files under `Student Part/data/`:
+
 ```bash
 cd "Student Part"
-python ingest/index.py
+python ingest/index.py            # add --append to keep the existing collection
 ```
 
-### 7. Start Server
+### 5. Run
 
 ```bash
 cd "Faculty Part"
-python -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-### 8. Access Application
+Open <http://localhost:8000/signin>. Interactive API docs are at `/docs`.
 
-- **Homepage**: http://localhost:8000
-- **Chat Interface**: http://localhost:8000/chat
-- **Sign In**: http://localhost:8000/signin
-- **API Docs**: http://localhost:8000/docs
-- **Qdrant Dashboard**: http://localhost:6334
+## API
 
-## 🔐 Demo Credentials
+| Method   | Path                         | Purpose                                 |
+|----------|------------------------------|-----------------------------------------|
+| `POST`   | `/api/auth/signin`           | Exchange email and password for a token |
+| `POST`   | `/query`                     | Ask a question (streaming or JSON)      |
+| `GET`    | `/health`                    | Service and dependency status           |
+| `POST`   | `/conversation/new`          | Start a conversation                    |
+| `GET`    | `/conversation/{session_id}` | Fetch a conversation's history          |
+| `DELETE` | `/conversation/{session_id}` | Delete a conversation                   |
+| `GET`    | `/conversations`             | List conversations                      |
 
-| Role | Email | Password | Access |
-|------|-------|----------|--------|
-| **Student** | student@nmims.edu | demo123 | Student collection only |
-| **Faculty** | faculty@nmims.edu | demo123 | Both collections, scope selector |
-| **Admin** | admin@nmims.edu | demo123 | Full access, all scopes |
+Example query:
 
-## 📚 Usage Examples
-
-### Student Queries
-```
-"List all units in Machine Learning"
-"Course Outcomes of CS"
-"What topics are covered in Unit 2 of ML?"
-"Show me question papers for Cyber Security"
-```
-
-### Faculty Queries
-```
-"What is the leave policy?"
-"How do I apply for research grants?"
-"Tell me about the Academic Guidelines"
-"What forms do I need for sabbatical leave?"
-```
-
-### Scope Selection
-- **Student Scope**: Queries only student collection (syllabi, question papers)
-- **Faculty Scope**: Queries only faculty collection (policies, forms, guidelines)
-- **Both Scope**: Queries both collections with RRF merging
-
-## 🔧 Configuration
-
-### Environment Variables
-
-**Faculty Part/.env:**
 ```bash
-# LLM Configuration
-LLM_PROVIDER=ollama
-LLM_MODEL=gemma3:12b
-OLLAMA_BASE_URL=http://localhost:11434
-
-# Embedding Model
-EMBEDDING_MODEL=BAAI/bge-m3
-
-# Vector Database
-QDRANT_URL=http://localhost:6333
-FACULTY_COLLECTION_NAME=faculty_chunks
-STUDENT_COLLECTION_NAME=academic_rag
-
-# Reranker
-RERANKER_MODEL=BAAI/bge-reranker-v2-m3
-
-# Demo Authentication
-DEMO_USER_STUDENT=student@nmims.edu:<bcrypt_hash>:student:Demo Student
-DEMO_USER_FACULTY=faculty@nmims.edu:<bcrypt_hash>:faculty:Demo Faculty
-DEMO_USER_ADMIN=admin@nmims.edu:<bcrypt_hash>:admin:Demo Admin
+curl -N http://localhost:8000/query \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "List all units in Machine Learning", "scope": "student", "stream": true}'
 ```
 
-**Student Part/.env:**
-```bash
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=academic_rag
-```
+## Configuration
 
-### Retrieval Parameters
+Runtime settings live in `Faculty Part/.env`:
 
-Edit `Faculty Part/config/chunking_config.py`:
+| Variable                  | Default                  | Notes                         |
+|---------------------------|--------------------------|-------------------------------|
+| `LLM_PROVIDER`            | `ollama`                 | `ollama` or `gemini`          |
+| `LLM_MODEL`               | `gemma3:12b`             |                               |
+| `OLLAMA_BASE_URL`         | `http://localhost:11434` |                               |
+| `GEMINI_API_KEY`          |                          | Only when using Gemini        |
+| `QDRANT_URL`              | `http://localhost:6333`  |                               |
+| `QDRANT_API_KEY`          |                          | Only for a secured Qdrant     |
+| `FACULTY_COLLECTION_NAME` | `faculty_chunks`         |                               |
+| `STUDENT_COLLECTION_NAME` | `academic_rag`           |                               |
+| `DEMO_USER_*`             |                          | Sign-in accounts, see above   |
 
-```python
-# Intent-based chunk limits
-INTENT_CHUNK_LIMITS = {
-    "lookup": 15,
-    "topic_search": 25,
-    "procedure": 20,
-    "general": 20,
-}
+Chunk sizes and per-intent retrieval limits are in
+`Faculty Part/config/chunking_config.py`. Course abbreviations are in
+`Faculty Part/src/retrieval/scope_router.py`.
 
-# Retrieval pipeline
-TOP_K_INITIAL = 40      # Hybrid search candidates
-TOP_K_RERANKED = 15     # After cross-encoder reranking
-```
+## Tests and evaluation
 
-## 📖 API Reference
-
-### Authentication
-
-**POST /api/auth/signin**
-```json
-{
-  "email": "admin@nmims.edu",
-  "password": "demo123"
-}
-```
-
-Response:
-```json
-{
-  "token": "...",
-  "role": "admin",
-  "user": {
-    "name": "Demo Admin",
-    "email": "admin@nmims.edu"
-  }
-}
-```
-
-### Query Endpoint
-
-**POST /query**
-```json
-{
-  "query": "List all units in Machine Learning",
-  "scope": "student",
-  "session_id": "uuid",
-  "stream": true,
-  "top_k": 20
-}
-```
-
-Headers:
-```
-Authorization: Bearer <token>
-Content-Type: application/json
-```
-
-Response (Server-Sent Events):
-```
-data: {"status": "retrieval", "message": "Searching..."}
-data: {"status": "generation", "message": "Generating answer..."}
-data: {"answer": {...}, "sources": [...]}
-```
-
-## 🧪 Testing
-
-### Run Tests
 ```bash
 cd "Faculty Part"
 pytest tests/
 ```
 
-### Manual Testing
-```bash
-# Test retrieval
-python scripts/test_retrieval.py
+`eval/golden/queries.jsonl` holds a set of reference questions.
+`eval/metrics.py` has the scoring functions: recall@k, MRR, and checks that
+answers are grounded in the retrieved text.
 
-# Test embeddings
-python scripts/test_embeddings.py
+## Known limitations
 
-# Check database
-python check_db.py
-```
+This is not ready for public deployment yet. Specifically:
 
-## 🐛 Troubleshooting
+- Accounts are read from environment variables, and session tokens are kept
+  in memory, so restarting the server signs everyone out.
+- There is no HTTPS, token expiry, or audit logging.
+- Rate limiting is per IP, not per user.
 
-### Common Issues
-
-**1. Server won't start - "Token in active_tokens: False"**
-- **Cause**: Server restarted, tokens cleared from memory
-- **Fix**: Logout and login again
-
-**2. "No chunks found" for valid queries**
-- **Cause**: BM25 index not built or collection empty
-- **Fix**: Re-run ingestion scripts
-
-**3. HuggingFace connection errors**
-- **Cause**: Model trying to check for updates
-- **Fix**: Already handled with offline mode flags
-
-**4. Slow embeddings**
-- **Cause**: Running on CPU
-- **Fix**: Use GPU or reduce batch size
-
-**5. "Course Outcomes of CS" returns 0 chunks**
-- **Cause**: Abbreviation not expanded
-- **Fix**: Already handled with abbreviation expansion
-
-### Debug Mode
-
-Enable detailed logging:
-```bash
-export DEBUG=True
-export LOG_LEVEL=DEBUG
-python -m uvicorn src.api.main:app --reload
-```
-
-Check logs:
-```bash
-tail -f Faculty\ Part/logs/context_usage.jsonl
-tail -f Faculty\ Part/embedding_log.jsonl
-```
-
-## 📊 Performance
-
-### Benchmarks (Local Machine)
-
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Query (cold) | ~2-3s | First query after restart |
-| Query (warm) | ~1-2s | With cache |
-| Embedding (CPU) | ~100ms/chunk | BAAI/bge-m3 |
-| Embedding (GPU) | ~20ms/chunk | CUDA acceleration |
-| Reranking | ~50ms | 15 candidates |
-| LLM Generation | ~1-2s | Streaming response |
-
-### Optimization Tips
-
-1. **Use GPU**: 5x faster embeddings
-2. **Enable caching**: Reduces repeated queries
-3. **Adjust top_k**: Lower = faster, higher = more comprehensive
-4. **Use streaming**: Better perceived performance
-5. **Persistent BM25**: Cached on disk, fast startup
-
-## 🔒 Security Notes
-
-⚠️ **Current Implementation is for Development/Demo Only**
-
-**Before Production:**
-- [ ] Replace in-memory tokens with Redis/database
-- [ ] Implement JWT with expiration and refresh
-- [ ] Add HTTPS/TLS
-- [ ] Use proper user database (not .env)
-- [ ] Add input sanitization and validation
-- [ ] Implement proper CORS policies
-- [ ] Add audit logging
-- [ ] Use secrets management (Vault, AWS Secrets Manager)
-- [ ] Add rate limiting per user (not just IP)
-- [ ] Implement session timeout
-
-## 🤝 Contributing
-
-### Adding New Documents
-
-**Faculty Documents:**
-1. Place PDFs in `Faculty Part/data/raw/`
-2. Update `Faculty Part/data/metadata.json`
-3. Run: `python scripts/ingest_new.py`
-
-**Student Documents:**
-1. Place Markdown files in `Student Part/data/syllabus/` or `Student Part/data/question_papers/`
-2. Run: `python ingest/index.py`
-
-### Adding New Course Abbreviations
-
-Edit `Faculty Part/src/retrieval/scope_router.py`:
-```python
-abbreviations = {
-    r'\bCS\b': 'Cyber Security',
-    r'\bML\b': 'Machine Learning',
-    r'\bYOUR_ABBR\b': 'Full Name',  # Add here
-}
-```
-
-## 📝 License
-
-[Your License Here]
-
-## 👥 Authors
-
-[Your Team/Organization]
-
-## 🙏 Acknowledgments
-
-- BAAI for BGE models
-- Qdrant for vector database
-- Ollama for local LLM inference
-- NMIMS for institutional support
-
----
-
-**Version**: 1.0.0  
-**Last Updated**: April 2026  
-**Status**: Production-Ready (with security hardening needed)
+See [INSTALL.md](INSTALL.md) for platform-specific setup and troubleshooting.
