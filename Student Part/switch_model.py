@@ -95,4 +95,4 @@ print("\nNext steps:")
 print("1. Restart the app: python -m streamlit run app.py")
 print("2. Test with a query")
 
-print("\nNote: If you also want to upgrade embeddings, see MODEL_RECOMMENDATIONS.md")
+print("\nNote: Changing the embedding model requires re-indexing (python ingest/index.py)")

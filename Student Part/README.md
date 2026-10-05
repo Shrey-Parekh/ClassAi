@@ -32,7 +32,6 @@ ollama pull nomic-embed-text
 ```
 
 **Recommended**: Use Gemma 3 12B for best accuracy and bge-m3 for embeddings!
-See `MODEL_RECOMMENDATIONS.md` for details.
 
 Start Ollama server:
 ```bash
@@ -249,8 +248,6 @@ llm_model="mistral:7b"   # Faster
 llm_model="qwen2.5:14b"    # Larger model
 ```
 
-See `MODEL_RECOMMENDATIONS.md` for detailed comparison.
-
 ### Change Embeddings
 
 Edit `rag/retriever.py` and `ingest/index.py`:
@@ -334,8 +331,7 @@ MIT License
 
 For issues or questions:
 1. Check the troubleshooting section
-2. Review `VALIDATION_RESULTS.md` for test results
-3. Open a GitHub issue
+2. Open a GitHub issue
 
 ---
 
