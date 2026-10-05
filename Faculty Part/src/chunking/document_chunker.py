@@ -62,11 +62,11 @@ class DocumentChunker:
             return "faculty_profile"
 
         keyword_map = {
-            "form_document":       ["form", "template", "compendium", "application", "applications_compendium", "fac"],
+            "form_document":       ["form", "template", "compendium", "application"],
             "procedure_document":  ["procedure", "process", "sop"],
-            "hr_policy":           ["hr", "leave", "salary", "payroll", "employee_resource", "resource_book", "erb"],
+            "hr_policy":           ["hr", "leave", "salary", "payroll", "employee_resource"],
             "legal_document":      ["legal", "compliance", "act", "statute", "agreement", "employment_agreement"],
-            "guidelines":          ["guideline", "handbook", "manual", "resource", "academic_guidelines", "fag"],
+            "guidelines":          ["guideline", "handbook", "manual", "resource"],
         }
 
         # Priority order for tie-breaking (lower index = higher priority)
@@ -95,35 +95,23 @@ class DocumentChunker:
     ) -> List[Chunk]:
         """
         Main entry point: chunk document based on detected type.
-
+        
         After type-specific chunking, assigns chunk levels (overview/section/atomic)
         based on position and content characteristics.
-
+        
         Args:
             text: Full document text
             filepath: Path to source file
             doc_metadata: Document-level metadata
-
+        
         Returns:
             List of chunks with metadata and level labels
         """
         source_type = self.detect_source_type(filepath)
         self.logger.info(f"Chunking {filepath.name} as {source_type}")
-
-        # CRITICAL: Strip page headers and footers BEFORE chunking.
-        # pypdf emits inline headers like "| HR Department  Page |" that prevent
-        # the major-header regex from matching SECTION / CHAPTER / Annexure
-        # titles. Stripping them first lets the chunker find proper structural
-        # boundaries.
-        #
-        # We SKIP stripping for:
-        #   - faculty_profile: text is already pre-formatted
-        #   - form_document: forms use the institutional header itself as the
-        #     boundary between forms — stripping it collapses all forms into
-        #     a single section. clean_chunk_text() still strips them per-chunk.
-        if source_type not in ("faculty_profile", "form_document"):
-            text = self._strip_page_headers(text)
-
+        # C6: reset per-document to prevent cross-document boilerplate suppression
+        self.seen_hashes = set()
+        
         if source_type == "faculty_profile":
             chunks = self._chunk_faculty_profile(text, filepath, doc_metadata)
         elif source_type == "hr_policy":
@@ -160,8 +148,8 @@ class DocumentChunker:
         chunks = []
         
         # Faculty profiles are already formatted by document_processor
-        # Each profile is separated by "=" * 60
-        profiles = text.split("=" * 60)
+        # Each profile is separated by "=" * 60 (use regex to tolerate 50-65 equals)
+        profiles = re.split(r'={50,}', text)
         
         for profile_text in profiles:
             profile_text = profile_text.strip()
@@ -204,7 +192,13 @@ class DocumentChunker:
         
         # Strip titles for clean name
         clean_name = self._strip_titles(raw_name).lower().strip()
-        name_parts = [p for p in clean_name.split() if len(p) > 1]
+        # Keep all parts including single-letter initials (A. K. Gupta → ["a", "k", "gupta"])
+        name_parts = clean_name.split()
+        # Also store concatenated initials form for robust matching ("akgupta")
+        initials = "".join(p[0] for p in name_parts if p)
+        last_name = name_parts[-1] if name_parts else ""
+        if initials and last_name and initials != last_name:
+            name_parts = name_parts + [initials + last_name]
         
         # Extract department
         dept_match = re.search(r'Department:\s*(.+?)(?:\n|$)', profile_text, re.IGNORECASE)
@@ -232,28 +226,40 @@ class DocumentChunker:
         }
     
     def _extract_research_tags(self, text: str) -> List[str]:
-        """Extract research interest keywords from profile."""
-        # Look for Research Interests section
-        match = re.search(r'Research Interests?:\s*(.+?)(?:\n\n|\nPublications?:|\nAwards?:|$)', 
-                         text, re.IGNORECASE | re.DOTALL)
-        
+        """Extract research interest keywords from profile.
+
+        Splits only on commas, semicolons, and newlines to preserve
+        multi-word phrases like 'drug discovery' or 'machine learning'.
+        Single-word stopwords are removed but multi-word phrases are kept.
+        """
+        match = re.search(
+            r'Research Interests?:\s*(.+?)(?:\n\n|\nPublications?:|\nAwards?:|$)',
+            text, re.IGNORECASE | re.DOTALL
+        )
+
         tags = []
-        
+
         if match:
             interests = match.group(1).strip()
-            # Split by common delimiters
-            tags = re.split(r'[,;•\n]', interests)
-            # Clean and lowercase
-            tags = [tag.strip().lower() for tag in tags if tag.strip()]
-            # Remove common words
-            stopwords = {'and', 'or', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
-            tags = [tag for tag in tags if tag not in stopwords and len(tag) > 2]
-        
-        # Fallback: extract from publication titles if research_interests is empty or "not specified"
+            # Split only on commas/semicolons/newlines — NOT on spaces
+            # This preserves "drug discovery", "machine learning", etc.
+            raw_tags = re.split(r'[,;\n•]', interests)
+            stopwords = {'and', 'or', 'the', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'a', 'an'}
+            for tag in raw_tags:
+                tag = tag.strip().lower()
+                if not tag:
+                    continue
+                # Keep multi-word phrases as-is; filter single stopwords
+                words = tag.split()
+                if len(words) == 1 and tag in stopwords:
+                    continue
+                if len(tag) > 2:
+                    tags.append(tag)
+
         if not tags or (len(tags) == 1 and "not specified" in tags[0].lower()):
             tags = self._extract_research_tags_from_publications(text)
-        
-        return tags[:10]  # Limit to 10 tags
+
+        return tags[:10]
     
     def _extract_research_tags_from_publications(self, text: str) -> List[str]:
         """Extract research topics from publication titles when research_interests is empty."""
@@ -312,37 +318,59 @@ class DocumentChunker:
                 break
         
         if not split_pos:
-            # No good split point, split at midpoint
-            split_pos = len(profile_text) // 2
+            # C2: walk from midpoint to nearest paragraph break instead of raw char slice
+            mid = len(profile_text) // 2
+            # Try to find a \n\n after the midpoint
+            para_break = profile_text.find('\n\n', mid)
+            if para_break == -1:
+                # Fall back to nearest \n
+                para_break = profile_text.find('\n', mid)
+            split_pos = para_break if para_break != -1 else mid
         
         chunk_a = profile_text[:split_pos].strip()
         chunk_b = profile_text[split_pos:].strip()
-        
-        # Add name to chunk B for context
+
+        # Add compact context header to chunk B for cross-chunk retrieval (item 9)
         name = metadata.get("original_name", "")
-        if name and not chunk_b.startswith("Faculty:"):
-            chunk_b = f"Faculty: {name}\n\n{chunk_b}"
-        
-        # Update metadata for both chunks
+        dept = metadata.get("department", "")
+        research_tags = metadata.get("research_tags", [])
+        top_tags = ", ".join(research_tags[:3]) if research_tags else ""
+
+        context_header = f"Faculty: {name}"
+        if dept:
+            context_header += f" | Dept: {dept}"
+        if top_tags:
+            context_header += f" | Research: {top_tags}"
+
+        if not chunk_b.startswith("Faculty:"):
+            chunk_b = f"{context_header}\n\n{chunk_b}"
+
         metadata_a = {**metadata, "chunk_part": "A", "has_sibling": True}
         metadata_b = {**metadata, "chunk_part": "B", "has_sibling": True}
-        
-        return [
+
+        chunks = [
             Chunk(
                 text=chunk_a,
                 metadata=metadata_a,
                 char_count=len(chunk_a),
                 token_count=self._count_tokens(chunk_a),
                 chunk_id=self._generate_chunk_id(filepath, 0, 0)
-            ),
-            Chunk(
+            )
+        ]
+
+        # C3: recursively split chunk B if still over 7500 tokens
+        if self._count_tokens(chunk_b) > 7500:
+            chunks.extend(self._split_large_faculty_profile(chunk_b, metadata_b, filepath))
+        else:
+            chunks.append(Chunk(
                 text=chunk_b,
                 metadata=metadata_b,
                 char_count=len(chunk_b),
                 token_count=self._count_tokens(chunk_b),
                 chunk_id=self._generate_chunk_id(filepath, 0, 1)
-            )
-        ]
+            ))
+
+        return chunks
     
     # ========== HR POLICY CHUNKING ==========
     
@@ -522,42 +550,29 @@ class DocumentChunker:
         # short window) by either:
         #   (a) a "Form Code:" line with an HR-XX-NN style code, OR
         #   (b) an ALL-CAPS line ending in FORM / APPLICATION
-        # Accepted form title endings. Most compendium forms end in FORM or
-        # APPLICATION, but a few end in REQUEST (e.g. CONFERENCE / RESEARCH
-        # TRAVEL REQUEST) or CLAIM (e.g. MEDICAL REIMBURSEMENT CLAIM).
-        form_title_suffix = r'(?:FORM|APPLICATION|REQUEST|CLAIM)'
         form_boundary = (
-            r'(?:^|\n|(?<=\s))'
-            r'(?=NMIMS.{1,5}Narsee Monjee Institute of Management Studies'
+            r'\n(?=NMIMS[\s\S]{1,10}Narsee Monjee Institute of Management Studies'
             r'(?:[\s\S]{0,600})'
-            r'(?:Form\s+Code|[A-Z][A-Z\s/]{3,}' + form_title_suffix + r'))'
+            r'(?:Form\s+Code|[A-Z][A-Z\s/]{3,}(?:FORM|APPLICATION)))'
         )
         form_sections = re.split(form_boundary, text)
 
         # Fallback: if the strict boundary found nothing, fall back to the
-        # loose institution-header split, then to ALL-CAPS form title split.
+        # loose institution-header split (also DOTALL-safe), then to ALL-CAPS form title split.
         if len(form_sections) <= 2:
-            form_boundary_loose = (
-                r'(?:^|\n|(?<=\s))'
-                r'(?=NMIMS.{1,5}Narsee Monjee Institute of Management Studies)'
-            )
+            form_boundary_loose = r'\n(?=NMIMS[\s\S]{1,10}Narsee Monjee Institute of Management Studies)'
             form_sections = re.split(form_boundary_loose, text)
 
         if len(form_sections) <= 2:
-            form_boundary_alt = (
-                r'(?:^|\n|(?<=\s))'
-                r'(?=[A-Z][A-Z\s/]{3,}' + form_title_suffix + r'\s*\n)'
-            )
+            form_boundary_alt = r'\n(?=[A-Z][A-Z\s]+FORM\s*\n)'
             form_sections = re.split(form_boundary_alt, text)
 
         # Re-merge any section that does NOT contain a form code AND does not
-        # contain a FORM/APPLICATION/REQUEST/CLAIM title — these are
-        # continuation pages that got split by a repeated page header.
+        # contain a FORM/APPLICATION title — these are continuation pages that
+        # got split by a repeated page header.
         merged = []
         code_re = re.compile(r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b')
-        title_re = re.compile(
-            r'^[A-Z][A-Z\s/]{3,}' + form_title_suffix + r'\b', re.MULTILINE
-        )
+        title_re = re.compile(r'^[A-Z][A-Z\s/]{3,}(?:FORM|APPLICATION)\b', re.MULTILINE)
         for sec in form_sections:
             if merged and not code_re.search(sec) and not title_re.search(sec):
                 merged[-1] = merged[-1] + '\n' + sec
@@ -580,11 +595,9 @@ class DocumentChunker:
             )
             form_code = form_code_match.group(1).upper() if form_code_match else ""
             
-            # Extract form title (ALL CAPS line ending in FORM/APPLICATION/
-            # REQUEST/CLAIM). Use [ \t] (not \s) in trailing class so we don't
-            # consume the newline and pick up the next line's first letter.
+            # Extract form title (ALL CAPS line containing "FORM" or "APPLICATION")
             form_title_match = re.search(
-                r'^([A-Z][A-Z \t/]+(?:FORM|APPLICATION|REQUEST|CLAIM)[A-Z \t/]*)(?=\s*$)',
+                r'^([A-Z][A-Z\s/]+(?:FORM|APPLICATION)[A-Z\s/]*)',
                 section, re.MULTILINE
             )
             form_title = form_title_match.group(1).strip() if form_title_match else ""
@@ -616,41 +629,28 @@ class DocumentChunker:
             # Emit per-SECTION sub-chunks for FAC forms so queries that target
             # a single section (e.g. "Section B of HR-LA-01") can retrieve
             # just that block. Skip the TOC chunk.
-            #
-            # Dedup note: page-header repeats can cause SECTION letters to
-            # re-fire (e.g. SECTION B appears on page 1 AND page 2 as the
-            # same block continues). We dedupe by section LETTER, keeping the
-            # first occurrence and extending its body to the next *distinct*
-            # letter.
             if not is_toc and form_code:
-                # Match "Section A: Applicant Details", "SECTION B -", etc.
+                # Match "Section A: Applicant Details", "SECTION B -",
+                # "Part A:", "Part 1:", "Schedule I:", "Section 1:" etc.
                 sub_pattern = re.compile(
-                    r'(?m)^\s*SECTION\s+([A-Z])\b[^\n]*$',
+                    r'(?m)^\s*(?:'
+                    r'SECTION\s+([A-Z\d]+)'          # SECTION A / SECTION 1
+                    r'|Part\s+([A-Z\d]+)'             # Part A / Part 1
+                    r'|Schedule\s+([A-Z\d]+)'         # Schedule I / Schedule A
+                    r')\b[^\n]*$',
                     re.IGNORECASE,
                 )
                 hits = list(sub_pattern.finditer(section))
-
-                # Build list of unique-letter boundaries: first occurrence only
-                by_letter: List[Tuple[int, str]] = []
-                seen_letters: set = set()
-                for m in hits:
-                    letter = m.group(1).upper()
-                    if letter in seen_letters:
-                        continue
-                    seen_letters.add(letter)
-                    by_letter.append((m.start(), letter))
-
-                for j, (start, letter) in enumerate(by_letter):
-                    end = by_letter[j + 1][0] if j + 1 < len(by_letter) else len(section)
+                for j, m in enumerate(hits):
+                    start = m.start()
+                    end = hits[j + 1].start() if j + 1 < len(hits) else len(section)
                     sub_text = section[start:end].strip()
-                    # Emit all form sections that have any content at all.
-                    # Previous threshold (20 tokens) was dropping Section A/C/D
-                    # on forms where those sections are mostly short field
-                    # labels ("Full Name", "Employee ID", etc.). A 5-token
-                    # floor is enough to drop pure separators without losing
-                    # structural sections.
-                    if not sub_text or self._count_tokens(sub_text) < 5:
+                    if not sub_text or self._count_tokens(sub_text) < 20:
                         continue
+                    letter = next(g for g in m.groups() if g is not None).upper()
+                    # C1: prepend form identifier so dense+BM25 can match "Section B of HR-LA-01"
+                    breadcrumb = f"{form_code} — {form_title} · Section {letter}" if form_title else f"{form_code} · Section {letter}"
+                    sub_text_with_header = f"{breadcrumb}\n\n{sub_text}"
                     sub_meta = {
                         **metadata,
                         "chunk_type": "form_section",
@@ -661,10 +661,10 @@ class DocumentChunker:
                         "sub_section_index": j,
                     }
                     chunks.append(Chunk(
-                        text=sub_text,
+                        text=sub_text_with_header,
                         metadata=sub_meta,
-                        char_count=len(sub_text),
-                        token_count=self._count_tokens(sub_text),
+                        char_count=len(sub_text_with_header),
+                        token_count=self._count_tokens(sub_text_with_header),
                         chunk_id=self._generate_chunk_id(filepath, f"{i}_{letter}")
                     ))
 
@@ -720,14 +720,28 @@ class DocumentChunker:
         for i, section in enumerate(sections):
             section_text = section["text"].strip()
             section_title = section["title"]
-            
+
             if not section_text:
                 continue
-            
+
+            # Build breadcrumb header for embedding context (items 2 & 5)
+            doc_name = filepath.stem.replace("_", " ")
+            form_code = doc_metadata.get("form_code", "")
+            breadcrumb_parts = [doc_name]
+            if form_code:
+                breadcrumb_parts.append(form_code)
+            if section_title:
+                breadcrumb_parts.append(section_title)
+            breadcrumb = "[" + " · ".join(breadcrumb_parts) + "]"
+
             token_count = self._count_tokens(section_text)
-            
+
+            # Item 16: use coded pattern with IGNORECASE for OCR-mixed-case form codes
+            has_form_code = bool(re.search(r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', section_text, re.IGNORECASE))
+
             if token_count <= max_tokens:
-                # Section fits in one chunk
+                # Section fits in one chunk — prepend breadcrumb
+                chunk_text = f"{breadcrumb}\n{section_text}"
                 metadata = {
                     "source_type": source_type,
                     "chunk_type": chunk_type,
@@ -736,15 +750,15 @@ class DocumentChunker:
                     "section_index": i,
                     "topic_tags": self._extract_topic_tags(section_text),
                     "has_steps": self._has_numbered_steps(section_text),
-                    "has_forms": "form" in section_text.lower(),
+                    "has_forms": has_form_code,
                     **doc_metadata
                 }
-                
+
                 chunks.append(Chunk(
-                    text=section_text,
+                    text=chunk_text,
                     metadata=metadata,
-                    char_count=len(section_text),
-                    token_count=token_count,
+                    char_count=len(chunk_text),
+                    token_count=self._count_tokens(chunk_text),
                     chunk_id=self._generate_chunk_id(filepath, i)
                 ))
             else:
@@ -754,8 +768,11 @@ class DocumentChunker:
                     max_tokens=max_tokens,
                     overlap_tokens=overlap_tokens
                 )
-                
+
                 for j, sub_text in enumerate(sub_chunks):
+                    # Prepend breadcrumb to every sub-chunk (item 2)
+                    chunk_text = f"{breadcrumb}\n{sub_text}"
+                    has_form_code_sub = bool(re.search(r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', sub_text))
                     metadata = {
                         "source_type": source_type,
                         "chunk_type": chunk_type,
@@ -765,15 +782,15 @@ class DocumentChunker:
                         "sub_index": j,
                         "topic_tags": self._extract_topic_tags(sub_text),
                         "has_steps": self._has_numbered_steps(sub_text),
-                        "has_forms": "form" in sub_text.lower(),
+                        "has_forms": has_form_code_sub,
                         **doc_metadata
                     }
-                    
+
                     chunks.append(Chunk(
-                        text=sub_text,
+                        text=chunk_text,
                         metadata=metadata,
-                        char_count=len(sub_text),
-                        token_count=self._count_tokens(sub_text),
+                        char_count=len(chunk_text),
+                        token_count=self._count_tokens(chunk_text),
                         chunk_id=self._generate_chunk_id(filepath, i, j)
                     ))
         
@@ -801,19 +818,23 @@ class DocumentChunker:
             List of {"title": str, "text": str} dicts
         """
         # ── Pass 1: Major structural headers ──
-        # Use (?:^|\n) so headers match at start of text too (after page-header
-        # stripping, the first SECTION may be at position 0).
         major_patterns = [
-            # SECTION N: TITLE — optionally captures a continuation line for
-            # multi-line titles like "SECTION 4: WORKING HOURS, ATTENDANCE &\n
-            # ACADEMIC WORKLOAD".
-            r'(?:^|\n)\s*(SECTION\s+\d+\s*:\s*[A-Z][A-Z0-9 &/()\-,]+?(?:\s*\n\s*[A-Z][A-Z0-9 &/()\-,]{3,}?)?)(?=\s*\n\s*\n|\s*\n\s*\d+\.\s)',
+            # SECTION N: TITLE with optional continuation line (ERB style: "SECTION 6: COMPENSATION &\n BENEFITS")
+            r'\n\s*(SECTION\s+\d+\s*:\s*.+?(?:\n[ \t]*[A-Z &]+)?)',
             # CHAPTER N: TITLE (Guidelines style)
-            r'(?:^|\n)\s*(CHAPTER\s+\d+\s*:\s*[^\n]+)',
-            # Annexure A: Title (case-insensitive — pypdf may emit "ANNEXURE")
-            r'(?:^|\n)\s*((?i:Annexure)\s+[A-Z]+\s*:\s*[^\n]+)',
+            r'\n\s*(CHAPTER\s+\d+\s*:\s*[^\n]+)',
+            # Annexure A: Title
+            r'\n\s*(Annexure\s+[A-Z]+\s*:\s*[^\n]+)',
             # N. ALL CAPS TITLE (Legal doc style: "4. WORKING OBLIGATIONS")
-            r'(?:^|\n)(\d{1,2}\.\s{1,3}[A-Z][A-Z][A-Z\s/&()\-,]+)\s*\n',
+            r'\n(\d{1,2}\.\s{1,3}[A-Z][A-Z][A-Z\s/&()\-,]+)\s*\n',
+            # N. Title Case Heading — C5: require blank line after to avoid matching list items
+            r'\n\s*(\d{1,2}\.\s+[A-Z][a-zA-Z][A-Za-z\s&/()\-,]{2,68})\s*\n\s*\n',
+            # Roman numeral headers: "I. Purpose", "II. Scope", "IX. Termination"
+            r'\n\s*((?:I{1,3}|IV|VI{0,3}|IX|XI{0,3}|V|X)\.\s+[A-Z][A-Za-z\s&/()\-,]{2,68})\s*\n',
+            # Bare ALL-CAPS heading on its own line (surrounded by blank lines to avoid matching mid-sentence caps)
+            r'\n\s*\n([A-Z][A-Z][A-Z][A-Z\s&/\-]{2,56})\s*\n\s*\n',
+            # Markdown-style heading: "## Eligibility", "### Required Documents"
+            r'\n(#{1,3}\s+[^\n]{3,78})\s*\n',
         ]
         
         major_positions = self._find_header_matches(text, major_patterns)
@@ -834,16 +855,10 @@ class DocumentChunker:
         for i, (start, end, title) in enumerate(major_positions):
             next_start = major_positions[i + 1][0] if i < len(major_positions) - 1 else len(text)
             section_text = text[end:next_start].strip()
-
-            # Normalise title: collapse any embedded newlines/tabs/multi-spaces
-            # to a single space. Multi-line titles like
-            #   "SECTION 4: WORKING HOURS, ATTENDANCE &\nACADEMIC WORKLOAD"
-            # should become a single-line title.
-            normalised_title = re.sub(r'\s+', ' ', title).strip()
-
+            
             # Prepend title to text so the section header is part of the chunk content
-            full_text = f"{normalised_title}\n{section_text}" if section_text else normalised_title
-            sections.append({"title": normalised_title, "text": full_text.strip()})
+            full_text = f"{title}\n{section_text}" if section_text else title
+            sections.append({"title": title, "text": full_text.strip()})
         
         # ── Pass 2: Sub-split oversized sections ──
         sub_patterns = [
@@ -938,13 +953,10 @@ class DocumentChunker:
         for i, (start, end, sub_title) in enumerate(sub_positions):
             next_start = sub_positions[i + 1][0] if i < len(sub_positions) - 1 else len(text)
             sub_text = text[end:next_start].strip()
-
-            # Normalise sub-title as well (same reason as parent titles).
-            normalised_sub_title = re.sub(r'\s+', ' ', sub_title).strip()
-
-            full_text = f"{normalised_sub_title}\n{sub_text}" if sub_text else normalised_sub_title
+            
+            full_text = f"{sub_title}\n{sub_text}" if sub_text else sub_title
             sub_sections.append({
-                "title": f"{parent_title} > {normalised_sub_title}",
+                "title": f"{parent_title} > {sub_title}",
                 "text": full_text.strip()
             })
         
@@ -975,22 +987,17 @@ class DocumentChunker:
         if has_numbered_list:
             # Check if entire text with list fits in limit
             text_tokens = self._count_tokens(text)
-            if text_tokens <= max_tokens * 1.1:  # Allow only 10% overflow for lists
+            if text_tokens <= max_tokens * 1.5:  # Allow 50% overflow for lists
                 return [text]
-
-            # Split before/after list, not inside — but only return early if
-            # both pieces fit within max_tokens. Otherwise fall through to
-            # paragraph-based splitting below.
+            
+            # Split before/after list, not inside
             list_start = re.search(r'\n\s*\d+\.\s+', text)
             if list_start:
                 before_list = text[:list_start.start()].strip()
                 list_and_after = text[list_start.start():].strip()
-
-                if (
-                    before_list
-                    and self._count_tokens(before_list) <= max_tokens
-                    and self._count_tokens(list_and_after) <= max_tokens * 1.1
-                ):
+                
+                # Try to keep list together
+                if before_list and self._count_tokens(before_list) <= max_tokens:
                     chunks.append(before_list)
                     chunks.append(list_and_after)
                     return chunks
@@ -1037,31 +1044,60 @@ class DocumentChunker:
     
     def _split_at_sentence_boundary(self, text: str, max_tokens: int) -> List[str]:
         """
-        Split text at sentence boundaries (. followed by capital letter).
-        
-        Never splits mid-sentence.
+        Split text at sentence boundaries, skipping common abbreviations.
+
+        C7: Rewritten without in-place list mutation — iterates parts into a
+        new list, merging when the preceding word is an abbreviation.
         """
-        chunks = []
-        
-        # Split on sentence boundaries: `. ` followed by capital letter
-        sentences = re.split(r'(\.\s+(?=[A-Z]))', text)
-        
-        # Rejoin sentences with their periods
-        full_sentences = []
-        for i in range(0, len(sentences) - 1, 2):
-            if i + 1 < len(sentences):
-                full_sentences.append(sentences[i] + sentences[i + 1])
-            else:
-                full_sentences.append(sentences[i])
-        if len(sentences) % 2 == 1:
-            full_sentences.append(sentences[-1])
-        
+        _ABBREVS = re.compile(
+            r'\b(?:Dr|Prof|Mr|Mrs|Ms|Miss|Sr|Jr|St|Lt|Capt|Col|Gen'
+            r'|No|Vol|vs|etc|e\.g|i\.e|viz|approx|dept|govt|univ'
+            r'|Ltd|Pvt|Inc|Corp|Co|Fig|Ref|Sec|Art|Cl|Para'
+            r'|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec'
+            r'|[A-Z])\.$',
+            re.IGNORECASE,
+        )
+
+        # Split on ". " followed by a capital — produces alternating [text, sep, text, sep, ...]
+        parts = re.split(r'(\.\s+)(?=[A-Z])', text)
+
+        # Merge parts into sentences, re-joining false splits caused by abbreviations
+        sentences: List[str] = []
+        buf = ""
+        i = 0
+        while i < len(parts):
+            part = parts[i]
+            # Is the next element a separator?
+            if i + 1 < len(parts) and re.match(r'^\.\s+$', parts[i + 1]):
+                sep = parts[i + 1]
+                last_word = part.rstrip().rsplit(None, 1)[-1] if part.strip() else ""
+                if _ABBREVS.match(last_word + "."):
+                    # Abbreviation — merge and continue without emitting
+                    buf += part + sep
+                    i += 2
+                    continue
+                else:
+                    # Real sentence end — emit
+                    sentences.append(buf + part + sep)
+                    buf = ""
+                    i += 2
+                    continue
+            # No separator follows — last fragment
+            buf += part
+            i += 1
+
+        if buf.strip():
+            sentences.append(buf)
+
+        if not sentences:
+            sentences = [text]
+
+        chunks: List[str] = []
         current_chunk = ""
         current_tokens = 0
-        
-        for sentence in full_sentences:
+
+        for sentence in sentences:
             sentence_tokens = self._count_tokens(sentence)
-            
             if current_tokens + sentence_tokens <= max_tokens:
                 current_chunk += sentence
                 current_tokens += sentence_tokens
@@ -1070,90 +1106,96 @@ class DocumentChunker:
                     chunks.append(current_chunk.strip())
                 current_chunk = sentence
                 current_tokens = sentence_tokens
-        
+
         if current_chunk:
             chunks.append(current_chunk.strip())
-        
+
         return chunks if chunks else [text]
     
     def _get_last_n_tokens(self, text: str, n_tokens: int) -> str:
-        """Get approximately last n tokens from text."""
-        # Rough approximation: 4 chars per token
+        """Get approximately last n tokens from text, ending at a sentence boundary."""
         n_chars = n_tokens * 4
-        return text[-n_chars:] if len(text) > n_chars else text
+        if len(text) <= n_chars:
+            return text
+        candidate = text[-n_chars:]
+        # Walk forward to the nearest sentence terminator so overlap starts clean
+        match = re.search(r'[.!?]\s+', candidate)
+        if match:
+            return candidate[match.end():]
+        return candidate
     
     def _group_table_rows(self, text: str) -> str:
-        """Group consecutive table-like rows into single paragraphs."""
+        """Group consecutive table-like rows into single paragraphs.
+
+        C4: Require 3+ space-run occurrences on the line (two columns + gap)
+        OR the pattern must appear on 2+ consecutive lines before treating
+        any of them as table rows — avoids false positives from PDF prose
+        with spurious double-spaces.
+        """
         lines = text.split('\n')
         result = []
         table_buffer = []
-        
-        for line in lines:
+
+        # Named-header rows that are always table rows
+        _HEADER_RE = re.compile(
+            r'^(Parameter|Field|Grade|Designation|Location|Leave Type|Day'
+            r'|Pay Component|Score Range|Action|Publication Type)\s',
+        )
+        # C4: require 3+ space runs (not just 2+)
+        _TABLE_ROW_RE = re.compile(r'^[A-Za-z\d\(][^\n]*\s{3,}[^\s]')
+
+        def _is_table(stripped: str) -> bool:
+            if _HEADER_RE.match(stripped):
+                return True
+            return bool(_TABLE_ROW_RE.match(stripped)) and len(stripped) > 20
+
+        for idx, line in enumerate(lines):
             stripped = line.strip()
-            # Table row: starts with a word, has content after large gap
-            is_table = bool(re.match(
-                r'^[A-Za-z\d\(][^\n]*\s{2,}[^\s]', stripped
-            )) and len(stripped) > 20
-            
-            # Also catch Parameter/Details header rows
-            if re.match(r'^(Parameter|Field|Grade|Designation|Location|Leave Type|Day|Pay Component|Score Range|Action|Publication Type)\s', stripped):
-                is_table = True
-            
-            if is_table:
+            # C4: only mark as table if this line AND the next (or prev) also match
+            prev_is_table = idx > 0 and _is_table(lines[idx - 1].strip())
+            next_is_table = idx < len(lines) - 1 and _is_table(lines[idx + 1].strip())
+            candidate = _is_table(stripped)
+
+            if candidate and (prev_is_table or next_is_table or _HEADER_RE.match(stripped)):
                 table_buffer.append(line)
             else:
                 if table_buffer:
                     result.append('\n'.join(table_buffer))
                     table_buffer = []
                 result.append(line)
-        
+
         if table_buffer:
             result.append('\n'.join(table_buffer))
-        
+
         return '\n\n'.join(result)
     
     def _extract_topic_tags(self, text: str) -> List[str]:
-        """Extract topic keywords from text."""
-        # Simple keyword extraction
-        text_lower = text.lower()
-
-        keywords = []
-
-        # Common faculty/HR keywords — expanded to cover NMIMS-specific
-        # policy vocabulary (sabbatical, POSH, FDP, CAS, APAR, etc.) so
-        # topic-based metadata filtering can route queries correctly.
+        """Extract topic keywords from text using word-boundary matching."""
         keyword_list = [
-            # Generic
+            # Core HR/policy
             "leave", "salary", "policy", "procedure", "application",
             "form", "faculty", "research", "publication", "award",
             "eligibility", "requirement", "deadline", "approval",
-            "department", "hr", "legal", "compliance",
-            # Leave types
-            "sabbatical", "maternity", "paternity", "casual leave",
-            "earned leave", "medical leave", "duty leave", "compensatory",
-            # Benefits / compensation
-            "gratuity", "provident fund", "pf", "nps", "pension",
-            "reimbursement", "medical reimbursement", "lta",
-            "professional development",
-            # Academic processes
-            "fdp", "faculty development",
-            "cas", "career advancement",
-            "apar", "appraisal", "performance review",
-            "phd", "doctorate",
-            # Governance / compliance
-            "posh", "sexual harassment", "icc", "grievance",
-            "code of conduct", "ethics",
-            # Teaching
-            "course", "teaching load", "credit", "syllabus",
-            # Travel
-            "travel", "conference", "tour",
+            "department", "legal", "compliance",
+            # NMIMS-specific domain terms
+            "sabbatical", "gratuity", "provident fund", "pf", "tds",
+            "promotion", "appraisal", "teaching load", "consultancy",
+            "attendance", "increment", "ltc", "medical reimbursement",
+            "seed grant", "conference", "travel", "reimbursement",
+            "noc", "deputation", "transfer", "resignation", "termination",
+            "probation", "confirmation", "contract", "agreement",
+            "phd", "research grant", "publication incentive",
+            "workload", "timetable", "examination", "evaluation",
+            "feedback", "mentoring", "counselling", "grievance",
+            "maternity", "paternity", "casual leave", "earned leave",
+            "medical leave", "duty leave", "special leave",
         ]
-
-        for keyword in keyword_list:
-            if keyword in text_lower:
-                keywords.append(keyword)
-
-        return keywords[:15]  # Slightly higher cap for richer tags
+        # Use \b word boundaries to avoid substring collisions (e.g. "hr" in "whether")
+        keywords = [
+            kw for kw in keyword_list
+            if re.search(r'\b' + re.escape(kw) + r'\b', text, re.IGNORECASE)
+        ]
+        return keywords[:15]
     
     def _has_numbered_steps(self, text: str) -> bool:
         """Check if text contains numbered steps."""
@@ -1187,17 +1229,20 @@ class DocumentChunker:
     
     def _count_tokens(self, text: str) -> int:
         """
-        Estimate token count more accurately than char/4.
-        
-        Uses word count * 1.3 to account for subword tokenization.
-        This is more accurate for Indian names, form codes, and institutional terminology.
+        Estimate token count using tiktoken cl100k_base.
+
+        More accurate than word×1.3 for hyphenated form codes (HR-LA-01),
+        Indian names with initials, and compound institutional terms.
+        Falls back to word×1.3 if tiktoken is unavailable.
         """
         if not text:
             return 0
-        
-        # Word-based estimation with subword inflation factor
-        word_count = len(text.split())
-        return int(word_count * 1.3)
+        try:
+            import tiktoken
+            enc = tiktoken.get_encoding("cl100k_base")
+            return len(enc.encode(text, disallowed_special=()))
+        except Exception:
+            return int(len(text.split()) * 1.3)
     
     def _assign_chunk_levels(self, chunks: List[Chunk], full_text: str) -> List[Chunk]:
         """
@@ -1317,72 +1362,31 @@ class DocumentChunker:
         
         return False, None
     
-    def _strip_page_headers(self, text: str) -> str:
-        """
-        Strip PDF page headers/footers that pypdf leaves inline.
-
-        This MUST be called before chunking so that structural headers
-        like "SECTION 6: COMPENSATION" land at the start of a line where
-        the major-header regex can match them.
-        """
+    def clean_chunk_text(self, text: str) -> str:
+        """Clean chunk text before embedding while preserving table structure."""
+        # Strip PDF headers/footers with exact patterns
         header_patterns = [
-            # Full banner with NMIMS and document title
-            r'NMIMS\s*[—–-]\s*Employee Resource Book[^\n]*?CONFIDENTIAL\s*',
-            r'NMIMS\s*[—–-]\s*Faculty Academic Guidelines[^\n]*?CONFIDENTIAL\s*',
-            r'NMIMS\s*[—–-]\s*Faculty Applications Compendium[^\n]*?CONFIDENTIAL\s*',
-            # Pipe-separated institutional footer variants.
-            # Note: pypdf sometimes omits the page number, leaving trailing
-            # "Page |" with nothing after, so we accept a bare "Page\s*\|" too.
-            r'(?:\|\s*)?Narsee Monjee Institute of Management Studies\s*\|[^\n]*?(?:www\.nmims\.edu|CONFIDENTIAL|Page\s*\|(?:\s*\d+)?)[^\n]*?(?=\s|$)',
-            r'\|\s*HR Department[^\n]*?(?:Page\s*\|(?:\s*\d+)?|www\.nmims\.edu)[^\n]*?(?=\s|$)',
-            r'\|\s*Office of the Dean[^\n]*?(?:Page\s*\|(?:\s*\d+)?|www\.nmims\.edu)[^\n]*?(?=\s|$)',
-            # Institution-name + HR Department + Page | (no digit case).
-            # This is the ERB format: "Narsee Monjee Institute of Management
-            # Studies | HR Department  Page |" — catches the leftover when the
-            # page number is missing.
-            r'Narsee Monjee Institute of Management Studies\s*\|\s*HR Department\s*Page\s*\|',
-            r'Narsee Monjee Institute of Management Studies\s*\|\s*Office of the Dean\s*Page\s*\|',
-            r'www\.nmims\.edu\s*',
-            r'STRICTLY CONFIDENTIAL\s*[—–-]\s*FOR INTERNAL USE ONLY[^\n]*',
-            r'CONFIDENTIAL\s*(?=\s|$)',
+            r'NMIMS\s*[—–-]\s*Employee Resource Book.*?CONFIDENTIAL\s*\n?',
+            r'NMIMS\s*[—–-]\s*Faculty Academic Guidelines.*?CONFIDENTIAL\s*\n?',
+            r'NMIMS\s*[—–-]\s*Faculty Applications Compendium.*?CONFIDENTIAL\s*\n?',
+            r'Narsee Monjee Institute of Management Studies\s*\|\s*HR Department.*?\n',
+            r'Narsee Monjee Institute of Management Studies\s*\|\s*Office of the Dean.*?\n',
+            r'www\.nmims\.edu\s*\n?',
+            r'STRICTLY CONFIDENTIAL\s*[—–-]\s*FOR INTERNAL USE ONLY.*?\n',
+            r'CONFIDENTIAL\s*\n',
             r'Page\s+\d+\s+of\s+\d+',
-            r'Page\s*\|\s*\d+',
-            r'\bPage\s+\d+\b',
-            r'©\s*\d{4}\s+NMIMS[^\n]*',
-            r'Document Version:[^\n]*',
-            r'Last Updated:[^\n]*',
-            r'AY\s*\d{4}\s*[-–]\s*\d{2,4}',
-            # Contact/address boilerplate that appears at doc footer
-            r'V\.\s*L\.\s*Mehta\s+Road[^\n]*',
-            r'Tel:\s*\+?91[^\n]*?Website:\s*[^\n]*',
-            r'Tel:\s*\+?91[^\n]*?@nmims\.edu[^\n]*',
-            r'Email:\s*[A-Za-z0-9._%+-]+@nmims\.edu[^\n]*',
-            # Naked "NMIMS — Narsee Monjee Institute of Management Studies"
-            # footer line that often precedes V.L. Mehta address.
-            r'NMIMS\s*[—–-]\s*Narsee Monjee Institute of Management Studies\s*(?=\n|$)',
-            # Lone institutional title line (no document-title context)
-            r'(?<=\n)\s*Narsee Monjee Institute of Management Studies\s*(?=\n|$)',
+            r'Page\s*\|\s*\d+',           # "Page | 12" style footer
+            r'(?m)^\s*Page\s+\d+\s*$',    # plain "Page 12" on its own line only
+            r'©\s*\d{4}\s+NMIMS',
+            r'Document Version:.*?\n',
+            r'Last Updated:.*?\n',
         ]
 
         for pattern in header_patterns:
-            text = re.sub(pattern, ' ', text, flags=re.IGNORECASE)
+            text = re.sub(pattern, '', text, flags=re.IGNORECASE | re.DOTALL)
 
-        # Normalise whitespace but preserve line breaks.
-        text = re.sub(r'[ \t]+', ' ', text)
-        # Ensure SECTION / CHAPTER / Annexure start on their own line.
-        text = re.sub(r'(?<!\n)\s+(SECTION\s+\d+\s*:)', r'\n\1', text)
-        text = re.sub(r'(?<!\n)\s+(CHAPTER\s+\d+\s*:)', r'\n\1', text)
-        text = re.sub(r'(?<!\n)\s+(Annexure\s+[A-Z]+\s*:)', r'\n\1', text, flags=re.IGNORECASE)
-
-        return text
-
-    def clean_chunk_text(self, text: str) -> str:
-        """Clean chunk text before embedding while preserving table structure."""
-        # Strip PDF headers/footers (same patterns used pre-chunking; applied
-        # here too in case any survived boundary-split artifacts).
-        text = self._strip_page_headers(text)
-
-        # De-duplicate repeated table-header rows like "Parameter Details".
+        # De-duplicate repeated table-header rows like "Parameter Details"
+        # that reappear every page when a table spans multiple pages.
         text = re.sub(
             r'(?:^|\n)\s*Parameter\s+Details\s*(?=\n(?:.*\n){0,1}.*?Parameter\s+Details)',
             '\n',
@@ -1395,21 +1399,31 @@ class DocumentChunker:
             text,
             flags=re.IGNORECASE,
         )
-
-        # Preserve table-like lines; collapse others.
+        
+        # Preserve table-like content — don't collapse lines with consistent structure
         lines = text.split('\n')
         cleaned_lines = []
+        
         for line in lines:
+            # Don't merge lines that look like table rows (Parameter + Value pattern)
+            # Pattern: Word/phrase followed by 3+ spaces then value
             if re.match(r'^[A-Za-z][A-Za-z\s\/\(\)]+\s{3,}.+', line):
-                cleaned_lines.append(line)
+                cleaned_lines.append(line)  # preserve as-is
             else:
+                # Clean individual line
                 line = re.sub(r'\s+', ' ', line)
                 cleaned_lines.append(line)
-
+        
         text = '\n'.join(cleaned_lines)
+        
+        # Remove repeated newlines (max 2)
         text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # Strip HTML tags if present
         text = re.sub(r'<[^>]+>', '', text)
+        
+        # Decode common unicode issues
         text = text.replace('\xa0', ' ')
         text = text.replace('\u200b', '')
-
+        
         return text.strip()

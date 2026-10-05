@@ -3,15 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0a0a0a">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com 'unsafe-inline'; font-src https://cdn.fontshare.com; img-src 'self' data:; connect-src 'self' http://localhost:8001 https://unpkg.com;">
     <title>Chat · ClassAI</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/chat.css">
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="/static/ambient.css">
+    <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
+    <div class="ambient-root" aria-hidden="true">
+        <div class="ambient-glow"></div>
+        <div class="ambient-grain"></div>
+    </div>
     <script>
+        // Simple token presence check
         (function() {
             if (!sessionStorage.getItem('classai_token')) {
                 window.location.replace('/signin');
@@ -22,13 +32,13 @@
     <div class="chat-root">
         <!-- Mobile backdrop -->
         <div class="mobile-backdrop" id="mobileBackdrop"></div>
-        
-        <!-- Sidebar -->
-        <aside class="sidebar">
+
+        <!-- A34: sidebar gets aria-hidden when closed on mobile -->
+        <aside class="sidebar" id="sidebar" aria-hidden="true">
             <div class="sidebar-inner">
                 <!-- Product mark -->
                 <div class="product-mark">
-                    <div class="product-initial">F</div>
+                    <div class="product-initial">C</div>
                     <div class="product-labels">
                         <span class="product-name">ClassAI</span>
                         <span class="product-role" id="roleLabel"></span>
@@ -37,30 +47,31 @@
 
                 <!-- New conversation -->
                 <button class="sidebar-new" onclick="startNewChat()">
-                    <i data-lucide="plus"></i>
+                    <i data-lucide="plus" aria-hidden="true"></i>
                     <span>New conversation</span>
                 </button>
 
                 <!-- History -->
                 <div class="sidebar-history">
                     <div class="sidebar-history-label">Recent</div>
-                    <div class="sidebar-history-list" id="historyList">
-                        <!-- Populated dynamically -->
-                    </div>
+                    <div class="sidebar-history-list" id="historyList"></div>
+                </div>
+
+                <!-- Corpus indicator -->
+                <div class="sidebar-corpus">
+                    <div class="sidebar-corpus-label">Corpus</div>
+                    <div class="sidebar-corpus-stat">1,247 sections indexed</div>
+                    <div class="sidebar-corpus-muted">across 43 documents</div>
                 </div>
 
                 <!-- Footer nav -->
                 <div class="sidebar-footer">
                     <a href="/" class="sidebar-nav-btn sidebar-nav-btn--active">
-                        <i data-lucide="home"></i>
+                        <i data-lucide="home" aria-hidden="true"></i>
                         <span>Home</span>
                     </a>
-                    <button class="sidebar-nav-btn">
-                        <i data-lucide="user-circle"></i>
-                        <span>Account</span>
-                    </button>
                     <button class="sidebar-nav-btn" onclick="signOut()">
-                        <i data-lucide="log-out"></i>
+                        <i data-lucide="log-out" aria-hidden="true"></i>
                         <span>Sign out</span>
                     </button>
                 </div>
@@ -71,30 +82,53 @@
         <main class="main-panel">
             <!-- Header -->
             <header class="main-header">
-                <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu">
-                    <i data-lucide="menu"></i>
+                <button class="mobile-menu-toggle" id="mobileMenuToggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="sidebar">
+                    <i data-lucide="menu" aria-hidden="true"></i>
                 </button>
-                <div class="model-id">ClassAI · Gemini</div>
             </header>
 
-            <!-- Messages -->
+            <!-- A33: messages is a live region -->
             <div class="messages-container" id="messagesContainer">
                 <div class="messages-inner">
                     <!-- Welcome screen -->
                     <section class="welcome" id="welcomeScreen">
-                        <div class="welcome-eyebrow">NMIMS Knowledge Base</div>
-                        <h1 class="welcome-title">Ask anything.</h1>
-                        <p class="welcome-description">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
-                        <div class="welcome-prompts">
-                            <button class="prompt-chip" onclick="usePrompt(this)">What are the leave rules for teaching staff?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">How do I apply for a grade appeal?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">What is the PhD coursework requirement?</button>
-                            <button class="prompt-chip" onclick="usePrompt(this)">Where can I find the Academic Calendar 2024-25?</button>
+                        <div class="welcome-eyebrow hero-reveal">NMIMS Knowledge Base</div>
+                        <h1 class="welcome-title hero-reveal">Ask anything.</h1>
+                        <p class="welcome-description hero-reveal">Search policies, documents, and institutional guidelines. Every answer references its source.</p>
+                        <p class="welcome-hint hero-reveal">Try asking about leave rules, grade appeals, or the academic calendar.</p>
+                        <div class="welcome-capabilities hero-reveal">
+                            <div class="capability">
+                                <div class="capability-num">01</div>
+                                <div class="capability-title">Policy &amp; leave rules</div>
+                                <div class="capability-desc">Ask about attendance, leave entitlements, or eligibility criteria.</div>
+                            </div>
+                            <div class="capability">
+                                <div class="capability-num">02</div>
+                                <div class="capability-title">Forms &amp; procedures</div>
+                                <div class="capability-desc">Find the right form, how to fill it, and where to submit.</div>
+                            </div>
+                            <div class="capability">
+                                <div class="capability-num">03</div>
+                                <div class="capability-title">Academic guidelines</div>
+                                <div class="capability-desc">Query the Academic Compendium, PhD rules, and examination procedures.</div>
+                            </div>
                         </div>
                     </section>
 
-                    <!-- Messages thread -->
-                    <div class="messages-thread" id="messages"></div>
+                    <!-- Messages thread — A33: role=log for screen readers -->
+                    <div class="messages-thread" id="messages" role="log" aria-live="polite" aria-atomic="false"></div>
+                </div>
+            </div>
+
+            <!-- Scope Selector (for faculty/admin only) -->
+            <div class="scope-selector" id="scopeSelector" style="display: none;">
+                <div class="scope-selector-inner">
+                    <span class="scope-selector-label">Search in:</span>
+                    <div class="scope-pills">
+                        <button class="scope-pill" data-scope="student">Student</button>
+                        <button class="scope-pill" data-scope="faculty">Faculty</button>
+                        <button class="scope-pill scope-pill--active" data-scope="both">Both</button>
+                    </div>
                 </div>
             </div>
 
@@ -102,17 +136,21 @@
             <footer class="composer-shell">
                 <div class="composer-inner">
                     <div class="composer-wrap">
-                        <textarea 
-                            id="userInput" 
-                            class="composer-input" 
+                        <!-- A50: maxlength cap -->
+                        <textarea
+                            id="userInput"
+                            class="composer-input"
                             placeholder="Ask a question about NMIMS policies, documents, or guidelines…"
                             rows="1"
+                            maxlength="5000"
+                            aria-label="Query input"
                         ></textarea>
-                        <button id="sendBtn" class="composer-send" disabled>
-                            <i data-lucide="arrow-up"></i>
+                        <button id="sendBtn" class="composer-send" disabled aria-label="Send message">
+                            <i data-lucide="arrow-up" aria-hidden="true"></i>
                         </button>
-                        <button id="stopBtn" class="composer-stop" style="display: none;">
-                            <i data-lucide="square"></i>
+                        <!-- A10: stop button wired in chat.js -->
+                        <button id="stopBtn" class="composer-stop" style="display: none;" aria-label="Stop generation">
+                            <i data-lucide="square" aria-hidden="true"></i>
                         </button>
                     </div>
                     <div class="composer-hint">Enter to send · Shift + Enter for new line</div>
@@ -121,6 +159,7 @@
         </main>
     </div>
 
+    <script src="/static/renderer.js"></script>
     <script src="/static/chat.js"></script>
     <script>lucide.createIcons();</script>
 </body>

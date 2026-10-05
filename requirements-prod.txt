@@ -1,0 +1,88 @@
+# ============================================================================
+# ClassAI - Production Requirements
+# Pinned versions for production deployment
+# ============================================================================
+
+# ── Core Web Framework ──────────────────────────────────────────────────────
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+aiofiles==23.2.1
+python-dotenv==1.0.0
+
+# ── Vector Database ─────────────────────────────────────────────────────────
+qdrant-client==1.9.0
+
+# ── LangChain (Student Part Ingestion) ──────────────────────────────────────
+langchain==0.1.0
+langchain-community==0.0.20
+langchain-core==0.1.23
+langchain-ollama==0.1.0
+langchain-qdrant==0.1.0
+langchain-text-splitters==0.0.1
+
+# ── Machine Learning & Embeddings ───────────────────────────────────────────
+torch==2.1.2
+transformers==4.36.0
+sentence-transformers==2.3.1
+FlagEmbedding==1.2.10
+fastembed==0.4.0
+
+# ── Search & Retrieval ──────────────────────────────────────────────────────
+rank-bm25==0.2.2
+nltk==3.8.1
+
+# ── Document Processing ─────────────────────────────────────────────────────
+pymupdf==1.24.0
+pypdf==3.17.4
+pdf2image==1.17.0
+pytesseract==0.3.10
+Pillow==10.3.0
+openpyxl==3.1.2
+
+# ── Caching & Performance ───────────────────────────────────────────────────
+redis==5.0.1
+diskcache==5.6.3
+
+# ── Security ────────────────────────────────────────────────────────────────
+bcrypt==4.1.2
+
+# ── Utilities ───────────────────────────────────────────────────────────────
+requests==2.31.0
+numpy==1.26.3
+tiktoken==0.6.0
+
+# ── Production Monitoring & Logging ─────────────────────────────────────────
+# Uncomment for production monitoring
+# gunicorn==21.2.0  # Production WSGI server
+# prometheus-client==0.19.0  # Metrics
+# sentry-sdk[fastapi]==1.40.0  # Error tracking
+
+# ============================================================================
+# Production Deployment Notes
+# ============================================================================
+#
+# 1. Use gunicorn instead of uvicorn for production:
+#    gunicorn src.api.main:app -w 4 -k uvicorn.workers.UvicornWorker
+#
+# 2. Set production environment variables:
+#    export DEBUG=False
+#    export LOG_LEVEL=WARNING
+#
+# 3. Use proper secrets management (not .env files)
+#
+# 4. Enable HTTPS/TLS
+#
+# 5. Configure proper CORS policies
+#
+# 6. Set up monitoring and alerting
+#
+# 7. Use persistent session storage (Redis/Database)
+#
+# 8. Configure rate limiting per user
+#
+# 9. Set up backup and disaster recovery
+#
+# 10. Enable audit logging
+#
+# ============================================================================

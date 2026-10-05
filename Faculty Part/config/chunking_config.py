@@ -47,8 +47,8 @@ TOP_K_RERANKED = 15  # After cross-encoder reranking (increased from 5)
 # These determine how many chunks to send to the LLM based on query intent
 # With 16K context window, we can use ~8K for chunks (rest for prompt/response)
 INTENT_CHUNK_LIMITS = {
-    "lookup": 8,           # Person lookup - profile + publications
-    "person_lookup": 8,    # Alias for lookup
+    "lookup": 15,          # R15: raised from 8 — profile chunks are short
+    "person_lookup": 15,   # Alias for lookup
     "department_list": 30, # Entire department listing
     "topic_search": 25,    # Broad topic coverage
     "procedure": 20,       # Policy + forms + guidelines + examples

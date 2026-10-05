@@ -21,21 +21,28 @@ class BM25PersistenceManager:
     - Automatic rebuild on corruption
     """
     
-    def __init__(self, storage_dir: str = "./bm25_index"):
+    def __init__(self, storage_dir: str = "./bm25_index", collection_name: str = "faculty_chunks"):
         """
         Initialize persistence manager.
         
         Args:
             storage_dir: Directory for BM25 index storage
+            collection_name: Collection name for namespacing cache files
         """
         self.storage_dir = Path(storage_dir)
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        self.collection_name = collection_name
         self.logger = logging.getLogger(__name__)
         
-        self.index_file = self.storage_dir / "bm25_index.pkl"
-        self.corpus_file = self.storage_dir / "corpus.pkl"
-        self.ids_file = self.storage_dir / "ids.pkl"
-        self.checksum_file = self.storage_dir / "checksum.txt"
+        # Namespace files by collection name
+        self.index_file = self.storage_dir / f"bm25_index_{collection_name}.pkl"
+        self.corpus_file = self.storage_dir / f"corpus_{collection_name}.pkl"
+        self.ids_file = self.storage_dir / f"ids_{collection_name}.pkl"
+        self.checksum_file = self.storage_dir / f"checksum_{collection_name}.txt"
+        
+        # Migration: rename legacy files if they exist and this is faculty_chunks
+        if collection_name == "faculty_chunks":
+            self._migrate_legacy_files()
     
     def save(
         self,
@@ -148,3 +155,21 @@ class BM25PersistenceManager:
             h.update((" ".join(tokens[:64])).encode())
             h.update(b"\n")
         return h.hexdigest()
+    
+    def _migrate_legacy_files(self):
+        """Migrate legacy unnamed cache files to collection-namespaced files."""
+        legacy_files = {
+            "bm25_index.pkl": self.index_file,
+            "corpus.pkl": self.corpus_file,
+            "ids.pkl": self.ids_file,
+            "checksum.txt": self.checksum_file
+        }
+        
+        for legacy_name, new_path in legacy_files.items():
+            legacy_path = self.storage_dir / legacy_name
+            if legacy_path.exists() and not new_path.exists():
+                try:
+                    legacy_path.rename(new_path)
+                    self.logger.info(f"Migrated {legacy_name} → {new_path.name}")
+                except Exception as e:
+                    self.logger.warning(f"Failed to migrate {legacy_name}: {e}")

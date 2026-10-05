@@ -2,7 +2,7 @@
 LLM-based answer generation with structured JSON output.
 """
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 import re
@@ -132,11 +132,15 @@ class AnswerGenerator:
                 self.logger.info(f"Token budget exhausted at chunk {i+1}/{len(chunks)}")
                 break
             
-            # Quality threshold: stop if relevance drops too low
-            # Reranker scores are typically 0-1, stop if < 0.3
+            # G8: Adaptive quality threshold — relative to top chunk score
             score = chunk.get("score", 1.0)
-            if i > 5 and score < 0.3:  # After first 5, enforce quality threshold
-                self.logger.info(f"Quality threshold not met at chunk {i+1} (score: {score:.3f})")
+            top_score = chunks[0].get("score", 1.0) if chunks else 1.0
+            adaptive_threshold = max(0.2, top_score * 0.5)
+            if i > 5 and score < adaptive_threshold:
+                self.logger.info(
+                    "Adaptive quality threshold %.2f not met at chunk %d (score: %.3f)",
+                    adaptive_threshold, i + 1, score
+                )
                 break
             
             selected.append(chunk)
@@ -153,7 +157,8 @@ class AnswerGenerator:
         self,
         query: str,
         retrieved_chunks: List[Dict[str, Any]],
-        intent_type: str = "general"
+        intent_type: str = "general",
+        format_preference: Optional[Any] = None
     ) -> Dict[str, Any]:
         """
         Generate structured JSON answer from query and retrieved chunks.
@@ -162,10 +167,18 @@ class AnswerGenerator:
             query: Original faculty query
             retrieved_chunks: Top-k chunks from retrieval pipeline (sorted by relevance)
             intent_type: Detected intent
+            format_preference: User format preferences (verbosity/structure)
         
         Returns:
             Dict with structured response, sources, and metadata
         """
+        # Import FormatPreference for type checking
+        from ..retrieval.query_understanding import FormatPreference
+        
+        # Default to standard format if not provided
+        if format_preference is None:
+            format_preference = FormatPreference()
+        
         # Select chunks dynamically based on token budget and relevance
         chunks_to_use = self._select_chunks_by_tokens(retrieved_chunks, intent_type)
         
@@ -204,8 +217,29 @@ class AnswerGenerator:
         self.logger.debug(f"Context preview (first 500 chars):\n{context[:500]}")
         self.logger.debug("=== END CONTEXT ===")
         
+        # Build format directive from format_preference
+        format_directive = self._build_format_directive(format_preference)
+        
         # Get JSON prompt for intent
         prompt = get_prompt(intent_type, context, query)
+        
+        # Inject format directive BEFORE intent-specific template
+        if format_directive:
+            # Insert format directive after SHARED_RULES but before CONTEXT
+            prompt = prompt.replace(
+                "CONTEXT:",
+                f"{format_directive}\n\nCONTEXT:"
+            )
+        
+        # Log format detection
+        self.logger.info(
+            "format=%s verbosity=%s structure=%s trigger_v=%r trigger_s=%r",
+            format_preference.structure,
+            format_preference.verbosity,
+            format_preference.structure,
+            format_preference.verbosity_trigger,
+            format_preference.structure_trigger
+        )
         
         self.logger.debug(f"=== PROMPT DIAGNOSTIC ===")
         self.logger.debug(f"Prompt length: {len(prompt)} chars")
@@ -218,6 +252,9 @@ class AnswerGenerator:
         context_chars = len(context)
         estimated_context_tokens = self._estimate_tokens(context)
         
+        # Scale output token budget by verbosity
+        output_tokens = self._get_token_budget(format_preference, self.OUTPUT_TOKENS)
+        
         self.logger.debug("=== TOKEN USAGE ESTIMATE ===")
         self.logger.debug(f"Prompt total characters: {prompt_chars}")
         self.logger.debug(f"Estimated INPUT tokens: {estimated_input_tokens}")
@@ -228,75 +265,89 @@ class AnswerGenerator:
         self.logger.debug(f"Usage: {(estimated_input_tokens/self.MAX_CONTEXT_TOKENS)*100:.1f}% of allocated context")
         self.logger.debug("=== END TOKEN ESTIMATE ===")
 
-        # Generate with Gemini 2.0 Flash
-        # TODO: Update format parameter for Gemini client wrapper (may need response_mime_type="application/json")
+        # Generate with LLM
         raw_response = self.llm.generate(
             prompt,
-            temperature=0.2,
-            max_tokens=2048,  # Increased for complex JSON responses with citations
-            format="json"  # TODO: Verify this parameter works with Gemini client wrapper
+            temperature=0.0,
+            max_tokens=output_tokens,
+            format="json"
         )
-        
-        # DIAGNOSTIC: Log what Gemini actually returns
-        self.logger.debug(f"=== RAW LLM RESPONSE ===")
-        self.logger.debug(f"Length: {len(raw_response)} chars")
-        self.logger.debug(f"First 500 chars: {raw_response[:500]}")
-        self.logger.debug(f"Last 100 chars: {raw_response[-100:]}")
-        self.logger.debug("=== END RAW RESPONSE ===")
 
-        # Parse and validate JSON
+        # G11: Detect likely truncation
+        if raw_response and not raw_response.rstrip().endswith('}'):
+            self.logger.warning("LLM response likely truncated (does not end with '}')")
+
+        # Parse and validate JSON — G10: retry once on failure
         structured = self._parse_json_response(raw_response, intent_type, query)
+        if structured.confidence == "none" and structured.fallback and "unable to format" in (structured.fallback or ""):
+            self.logger.info("Parse failed on first attempt, retrying with repair prompt")
+            repair_prompt = (
+                f"Your previous response was not valid JSON. Here it is:\n\n{raw_response[:800]}\n\n"
+                f"Fix it so it is valid JSON matching the required schema. Return ONLY valid JSON."
+            )
+            raw_response2 = self.llm.generate(repair_prompt, temperature=0.0,
+                                               max_tokens=self.OUTPUT_TOKENS, format="json")
+            structured2 = self._parse_json_response(raw_response2, intent_type, query)
+            if structured2.confidence != "none":
+                structured = structured2
         
-        # Auto-generate footer from source documents if not provided by LLM
+        # Auto-generate footer from source documents if not provided by LLM (G19: prefer metadata title)
         if not structured.footer:
             source_docs = set()
             for chunk in chunks_to_use:
-                doc_name = chunk.get("metadata", {}).get("document_name", "")
-                if doc_name:
-                    clean_name = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
-                    source_docs.add(clean_name)
-            
+                meta = chunk.get("metadata", {})
+                # Prefer human-readable title from metadata.json, fall back to cleaned filename
+                title = meta.get("title", "")
+                if not title:
+                    doc_name = meta.get("document_name", "")
+                    title = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
+                if title:
+                    source_docs.add(title)
             if source_docs:
                 structured.footer = "Based on: " + ", ".join(sorted(source_docs))
 
         # Extract sources
         sources = self._extract_sources(chunks_to_use)
 
-        # Calculate confidence
-        confidence = self._calculate_confidence(chunks_to_use, structured)
-
-        # Citation grounding: verify each claim has support in the retrieved
-        # chunks. Ungrounded spans mean the LLM may have hallucinated, so we
-        # downgrade the confidence rather than present an unsupported answer
-        # as authoritative. See ``_check_grounding`` for the full heuristic.
+        # G3: Grounding check — downgrade confidence if answer isn't anchored in chunks
         grounding = self._check_grounding(structured, chunks_to_use)
-        if grounding["ratio"] < 0.5 and confidence in ("high", "medium"):
+        ratio = grounding.get("ratio")
+        if ratio is None:
+            # Empty answer — downgrade for no-content reason, not hallucination
+            if structured.confidence in ("high", "medium"):
+                structured.confidence = "low"
+        elif ratio < 0.5 and structured.confidence in ("high", "medium"):
             self.logger.warning(
-                "Grounding ratio %.2f below 0.5 — downgrading confidence from %s",
-                grounding["ratio"], confidence,
+                "Grounding ratio %.2f below 0.5 — downgrading confidence", ratio
             )
-            confidence = "low"
-        elif grounding["ratio"] < 0.25:
-            confidence = "none"
+            structured.confidence = "low"
+        elif ratio < 0.25:
+            structured.confidence = "none"
 
+        # G2: Take minimum of LLM confidence and heuristic confidence
+        heuristic_confidence = self._calculate_confidence(chunks_to_use, structured)
+        confidence_order = ["none", "low", "medium", "high"]
+        llm_conf_idx = confidence_order.index(structured.confidence)
+        heuristic_conf_idx = confidence_order.index(heuristic_confidence)
+        confidence = confidence_order[min(llm_conf_idx, heuristic_conf_idx)]
+        
         # Log context usage
         self._log_context_usage(query, chunks_to_use, estimated_context_tokens)
-
+        
         # Use model_dump() for Pydantic v2 compatibility
         try:
             structured_dict = structured.model_dump()
         except AttributeError:
             # Fallback for Pydantic v1
             structured_dict = structured.dict()
-
+        
         return {
             "structured": structured_dict,
             "sources": sources,
             "chunks_used": len(chunks_to_use),
             "intent": intent_type,
             "confidence": confidence,
-            "tokens_used": estimated_context_tokens,
-            "grounding": grounding,
+            "tokens_used": estimated_context_tokens
         }
     
     def _parse_json_response(
@@ -343,11 +394,9 @@ class AnswerGenerator:
             return StructuredResponse(**data)
         
         except (json.JSONDecodeError, ValidationError) as e:
-            # Log the failure for debugging
-            self.logger.error(f"JSON parse failed for intent '{intent}': {e}")
-            self.logger.error(f"Raw response was: {raw_text[:500]}")
-            
-            # Return clean fallback response
+            self.logger.error("JSON parse failed for intent '%s': %s", intent, e)
+            self.logger.error("Raw response was: %s", raw_text[:500])
+
             return StructuredResponse(
                 intent=intent,
                 title="Response Error",
@@ -393,20 +442,24 @@ class AnswerGenerator:
                 section_type = section.get("type", "paragraph")
                 
                 if section_type in ["bullets", "steps"]:
-                    # These need "items" field
-                    for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
-                        if correct_field == "items" and wrong_field in section:
-                            section["items"] = section.pop(wrong_field)
+                    # These need "items" field — only fix if "items" is missing
+                    if "items" not in section:
+                        for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
+                            if correct_field == "items" and wrong_field in section:
+                                section["items"] = section.pop(wrong_field)
+                                break
                     
                     # Ensure items is a list
                     if "items" in section and not isinstance(section["items"], list):
                         section["items"] = [str(section["items"])]
                 
                 elif section_type == "paragraph":
-                    # These need "content" field
-                    for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
-                        if correct_field == "content" and wrong_field in section:
-                            section["content"] = section.pop(wrong_field)
+                    # These need "content" field — only fix if "content" is missing
+                    if "content" not in section:
+                        for wrong_field, correct_field in SECTION_FIELD_FIXES.items():
+                            if correct_field == "content" and wrong_field in section:
+                                section["content"] = section.pop(wrong_field)
+                                break
                 
                 elif section_type == "table":
                     # Normalize table: LLM may send content as list of dicts
@@ -442,44 +495,183 @@ class AnswerGenerator:
         
         return data
     
+    def _check_grounding(
+        self,
+        structured: Any,
+        chunks: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Estimate how much of the generated answer is supported by chunks.
+
+        Returns ratio (0..1 or None if no sentences), grounded/total counts,
+        and a reason tag. Uses 3-gram shingle overlap with Jaccard fallback.
+        ratio=None means empty answer (not hallucination).
+        """
+        sentences = self._extract_answer_sentences(structured)
+        if not sentences:
+            return {"ratio": None, "grounded": 0, "total": 0,
+                    "ungrounded_samples": [], "reason": "no_answer_sentences"}
+        if not chunks:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3], "reason": "no_chunks"}
+
+        chunk_tokens: List[str] = []
+        for chunk in chunks:
+            text = (
+                chunk.get("text") or chunk.get("content") or
+                chunk.get("payload", {}).get("text", "") or ""
+            )
+            chunk_tokens.extend(self._normalize_text(text))
+
+        chunk_shingles = self._shingle_set(chunk_tokens, n=3)
+        chunk_unigrams = set(chunk_tokens)
+
+        if not chunk_shingles and not chunk_unigrams:
+            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
+                    "ungrounded_samples": sentences[:3], "reason": "empty_chunk_shingles"}
+
+        grounded = 0
+        ungrounded: List[str] = []
+        for sentence in sentences:
+            s_tokens = self._normalize_text(sentence)
+            if not s_tokens:
+                grounded += 1
+                continue
+            s_shingles = self._shingle_set(s_tokens, n=3)
+            s_unigrams = set(s_tokens)
+            if s_shingles & chunk_shingles:
+                grounded += 1
+                continue
+            overlap = len(s_unigrams & chunk_unigrams) / len(s_unigrams)
+            if overlap >= 0.5:
+                grounded += 1
+            else:
+                ungrounded.append(sentence)
+
+        ratio = grounded / len(sentences)
+        return {
+            "ratio": round(ratio, 3),
+            "grounded": grounded,
+            "total": len(sentences),
+            "ungrounded_samples": ungrounded[:3],
+            "reason": "ok" if ratio >= 0.5 else "low_overlap",
+        }
+
+    def _extract_answer_sentences(self, structured: Any) -> List[str]:
+        """Extract content-bearing sentences from a StructuredResponse."""
+        sentences = []
+        if not hasattr(structured, 'sections'):
+            return sentences
+        for section in structured.sections:
+            content = getattr(section, 'content', None)
+            if content and isinstance(content, str):
+                sentences.extend(re.split(r'(?<=[.!?])\s+', content.strip()))
+            items = getattr(section, 'items', None)
+            if items and isinstance(items, list):
+                sentences.extend(items)
+        return [s.strip() for s in sentences if len(s.strip()) > 10]
+
+    def _normalize_text(self, text: str) -> List[str]:
+        """Lowercase, remove punctuation, split to tokens, remove stopwords."""
+        _STOPWORDS = {'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been',
+                      'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will',
+                      'would', 'could', 'should', 'may', 'might', 'shall', 'can',
+                      'to', 'of', 'in', 'for', 'on', 'with', 'at', 'by', 'from',
+                      'and', 'or', 'but', 'not', 'this', 'that', 'it', 'its'}
+        tokens = re.findall(r'\b[a-z0-9]+\b', text.lower())
+        return [t for t in tokens if t not in _STOPWORDS and len(t) > 1]
+
+    def _shingle_set(self, tokens: List[str], n: int = 3) -> set:
+        """Build n-gram shingle set from token list."""
+        return {tuple(tokens[i:i + n]) for i in range(len(tokens) - n + 1)}
+
     def _build_context(self, chunks: List[Dict[str, Any]]) -> str:
         """
-        Build context string from retrieved chunks.
+        Build numbered context string from retrieved chunks.
         
-        Each chunk includes source information for reference.
+        Each chunk is numbered [N] so the LLM can reference sources.
+        Handles both Faculty and Student chunk metadata gracefully.
         """
         context_parts = []
-        
-        for chunk in chunks:
-            # Text is at top level, not in metadata
-            content = chunk.get("text", "")
-            doc_name = chunk.get("metadata", {}).get("document_name", "Unknown Document")
-            section = chunk.get("metadata", {}).get("section_title", "")
+
+        for i, chunk in enumerate(chunks, 1):
+            # Try multiple possible content keys (Faculty vs Student chunks)
+            content = (
+                chunk.get("text") or 
+                chunk.get("content") or 
+                chunk.get("chunk_text") or
+                chunk.get("payload", {}).get("text") or 
+                chunk.get("payload", {}).get("content") or
+                ""
+            )
             
-            # Build source header
-            source_header = f"Source: {doc_name}"
+            metadata = chunk.get("metadata", {})
+            
+            # Try multiple possible document name keys
+            # Faculty chunks: document_name
+            # Student chunks: source, subject, course_name
+            doc_name = (
+                metadata.get("document_name") or
+                metadata.get("source") or
+                metadata.get("subject") or
+                metadata.get("course_name") or
+                "Unknown Document"
+            )
+            
+            # Try multiple possible section keys
+            # Faculty chunks: section_title
+            # Student chunks: unit_name, question_id
+            section = (
+                metadata.get("section_title") or
+                metadata.get("unit_name") or
+                metadata.get("question_id") or
+                ""
+            )
+
+            source_header = f"[{i}] Source: {doc_name}"
             if section:
                 source_header += f" — {section}"
-            
-            # Format without numbering
-            formatted = f"{source_header}\n{content}"
-            context_parts.append(formatted)
-        
+
+            context_parts.append(f"{source_header}\n{content}")
+
         return "\n\n---\n\n".join(context_parts)
     
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
-        """Extract source document information from chunks."""
+        """
+        Extract source document information from chunks.
+        Handles both Faculty and Student chunk metadata gracefully.
+        """
         sources = []
         seen_docs = set()
         
         for chunk in chunks:
             metadata = chunk.get("metadata", {})
-            doc_id = metadata.get("doc_id")
+            
+            # Try multiple possible ID keys
+            # Faculty chunks: doc_id
+            # Student chunks: source, filepath, or generate from source
+            doc_id = (
+                metadata.get("doc_id") or
+                metadata.get("source") or
+                metadata.get("filepath") or
+                metadata.get("subject", "unknown")
+            )
             
             if doc_id and doc_id not in seen_docs:
+                # Try multiple possible title keys
+                # Faculty chunks: title
+                # Student chunks: subject, course_name, source
+                title = (
+                    metadata.get("title") or
+                    metadata.get("subject") or
+                    metadata.get("course_name") or
+                    metadata.get("source") or
+                    "Unknown Document"
+                )
+                
                 sources.append({
                     "doc_id": doc_id,
-                    "title": metadata.get("title", "Unknown Document"),
+                    "title": title,
                     "date": metadata.get("date", ""),
                     "applies_to": metadata.get("applies_to", ""),
                 })
@@ -529,150 +721,33 @@ class AnswerGenerator:
         else:
             return "none"
 
-    # -- Citation grounding --------------------------------------------------
-    #
-    # Even with tight prompts the LLM occasionally invents specifics (dates,
-    # durations, form codes) that aren't in the retrieved chunks. We detect
-    # that post-hoc by shingling both the answer and the chunk text and
-    # measuring what fraction of the answer's content-bearing sentences has
-    # any overlap with chunk text. A low overlap ratio is a strong signal of
-    # hallucination, so the caller downgrades confidence accordingly.
-
-    _WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9\-/]*")
-    _SENT_SPLIT = re.compile(r"(?<=[.\!?])\s+(?=[A-Z0-9])")
-    _STOPWORDS = frozenset({
-        "the", "a", "an", "and", "or", "but", "of", "in", "on", "at", "to",
-        "for", "with", "by", "from", "as", "is", "are", "was", "were", "be",
-        "been", "being", "it", "its", "this", "that", "these", "those", "if",
-        "then", "than", "so", "not", "no", "yes", "can", "may", "will", "shall",
-        "should", "would", "could", "have", "has", "had", "do", "does", "did",
-    })
-
-    @classmethod
-    def _normalize_text(cls, text: str) -> List[str]:
-        """Lowercase, tokenize, and strip trivial stopwords."""
-        tokens = cls._WORD_RE.findall((text or "").lower())
-        return [t for t in tokens if t not in cls._STOPWORDS and len(t) > 1]
-
-    @classmethod
-    def _shingle_set(cls, tokens: List[str], n: int = 4) -> set:
-        """Produce an n-gram shingle set; falls back to unigrams for short text."""
-        if not tokens:
-            return set()
-        if len(tokens) < n:
-            return set(tokens)
-        return {" ".join(tokens[i:i + n]) for i in range(len(tokens) - n + 1)}
-
-    def _extract_answer_sentences(self, structured: Any) -> List[str]:
-        """Flatten a StructuredResponse into discrete content-bearing sentences."""
-        sentences: List[str] = []
-        sections = getattr(structured, "sections", None) or []
-        for section in sections:
-            content = getattr(section, "content", None)
-            if isinstance(content, str) and content.strip():
-                sentences.extend(self._SENT_SPLIT.split(content.strip()))
-            items = getattr(section, "items", None)
-            if isinstance(items, list):
-                for item in items:
-                    if isinstance(item, str) and item.strip():
-                        sentences.append(item.strip())
-                    elif isinstance(item, dict):
-                        for key in ("text", "content", "description", "body"):
-                            val = item.get(key)
-                            if isinstance(val, str) and val.strip():
-                                sentences.append(val.strip())
-                                break
-        summary = getattr(structured, "summary", None)
-        if isinstance(summary, str) and summary.strip():
-            sentences.extend(self._SENT_SPLIT.split(summary.strip()))
-        return [s for s in (s.strip() for s in sentences) if len(s.split()) >= 4]
-
-    def _check_grounding(
-        self,
-        structured: Any,
-        chunks: List[Dict[str, Any]],
-    ) -> Dict[str, Any]:
-        """Estimate how much of the generated answer is supported by chunks.
-
-        Returns a dict with ``ratio`` (0..1), ``grounded``/``total`` counts,
-        up to three ``ungrounded_samples`` for triage, and a ``reason`` tag.
-        The method is deliberately lenient: 4-grams after stopword removal
-        let paraphrased-but-faithful sentences still match, while a
-        hallucinated fact (new form code, invented duration) will produce
-        a nearly empty intersection.
-        """
-        sentences = self._extract_answer_sentences(structured)
-        if not sentences:
-            return {"ratio": 0.0, "grounded": 0, "total": 0,
-                    "ungrounded_samples": [], "reason": "no_answer_sentences"}
-        if not chunks:
-            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
-                    "ungrounded_samples": sentences[:3], "reason": "no_chunks"}
-
-        chunk_tokens: List[str] = []
-        for chunk in chunks:
-            text = (
-                chunk.get("text")
-                or chunk.get("content")
-                or chunk.get("chunk_text")
-                or chunk.get("payload", {}).get("text", "")
-                or ""
-            )
-            chunk_tokens.extend(self._normalize_text(text))
-
-        chunk_shingles = self._shingle_set(chunk_tokens, n=3)
-        chunk_unigrams = set(chunk_tokens)
-
-        if not chunk_shingles and not chunk_unigrams:
-            return {"ratio": 0.0, "grounded": 0, "total": len(sentences),
-                    "ungrounded_samples": sentences[:3],
-                    "reason": "empty_chunk_shingles"}
-
-        grounded = 0
-        ungrounded: List[str] = []
-        for sentence in sentences:
-            s_tokens = self._normalize_text(sentence)
-            if not s_tokens:
-                # All-stopword sentence — nothing distinctive to hallucinate.
-                grounded += 1
-                continue
-            s_shingles = self._shingle_set(s_tokens, n=3)
-            s_unigrams = set(s_tokens)
-            if s_shingles & chunk_shingles:
-                grounded += 1
-                continue
-            # Token Jaccard fallback — paraphrases still share most
-            # distinctive tokens even when 3-grams miss.
-            overlap = len(s_unigrams & chunk_unigrams) / len(s_unigrams)
-            if overlap >= 0.5:
-                grounded += 1
-            else:
-                ungrounded.append(sentence)
-
-        ratio = grounded / len(sentences)
-        return {
-            "ratio": round(ratio, 3),
-            "grounded": grounded,
-            "total": len(sentences),
-            "ungrounded_samples": ungrounded[:3],
-            "reason": "ok" if ratio >= 0.5 else "low_overlap",
-        }
-
+    
     def _log_context_usage(
         self,
         query: str,
         chunks: List[Dict[str, Any]],
-        tokens_used: int,
+        tokens_used: int
     ) -> None:
-        """Log context usage to file for later analysis."""
+        """
+        Log context usage to file for analysis.
+        
+        Args:
+            query: Original query
+            chunks: Chunks used
+            tokens_used: Estimated tokens used
+        """
         import json
         from datetime import datetime
         from pathlib import Path
-
+        
         try:
+            # Create logs directory
             log_dir = Path("logs")
             log_dir.mkdir(exist_ok=True)
+            
+            # Append to log file
             log_file = log_dir / "context_usage.jsonl"
+
             log_entry = {
                 "timestamp": datetime.utcnow().isoformat(),
                 "query": query,
@@ -681,7 +756,78 @@ class AnswerGenerator:
                 "max_context_tokens": self.MAX_CONTEXT_TOKENS,
                 "available_for_chunks": self.AVAILABLE_FOR_CHUNKS,
             }
+
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry) + "\n")
         except Exception as e:
-            self.logger.error(f"Failed to log context usage: {e}")
+            self.logger.warning(f"Failed to log context usage: {e}")
+    
+    def _build_format_directive(self, fp: Any) -> str:
+        """
+        Build format directive from FormatPreference.
+        
+        Args:
+            fp: FormatPreference object
+        
+        Returns:
+            Format directive string to inject into prompt
+        """
+        parts = []
+        
+        if fp.verbosity == "brief":
+            parts.append(
+                "The user requested a BRIEF answer. Keep the response to 1-2 "
+                "short sections maximum. No preamble. Aim for under 80 words total."
+            )
+        elif fp.verbosity == "detailed":
+            parts.append(
+                "The user requested a DETAILED answer. Provide thorough coverage "
+                "with multiple sections. Include relevant context, examples, and "
+                "edge cases where supported by the retrieved documents."
+            )
+        
+        if fp.structure == "table":
+            parts.append(
+                "The user requested a TABLE. Your response MUST use at least one "
+                "section with type 'table' that directly answers the query. "
+                "Include a paragraph section only if needed to introduce the table."
+            )
+        elif fp.structure == "bullets":
+            parts.append(
+                "The user requested BULLETS. Use a section with type 'bullets' "
+                "as the primary content. Each bullet should be a complete, "
+                "standalone point."
+            )
+        elif fp.structure == "steps":
+            parts.append(
+                "The user requested STEP-BY-STEP guidance. Use a section with "
+                "type 'steps' as the primary content. Each step must be "
+                "actionable and sequenced."
+            )
+        elif fp.structure == "paragraph":
+            parts.append(
+                "The user requested PARAGRAPH form. Use a section with type "
+                "'paragraph'. Avoid bullets, tables, or numbered steps."
+            )
+        
+        if not parts:
+            return ""
+        
+        return "USER FORMAT REQUIREMENTS (must be honored):\n- " + "\n- ".join(parts)
+    
+    def _get_token_budget(self, fp: Any, base: int) -> int:
+        """
+        Scale token budget by verbosity level.
+        
+        Args:
+            fp: FormatPreference object
+            base: Base token budget
+        
+        Returns:
+            Scaled token budget
+        """
+        if fp.verbosity == "brief":
+            return max(256, base // 3)
+        if fp.verbosity == "detailed":
+            return int(base * 1.5)
+        return base

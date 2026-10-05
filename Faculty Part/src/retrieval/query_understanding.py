@@ -2,9 +2,24 @@
 Enhanced query understanding with intent, domain, and entity detection.
 """
 
-from typing import Dict, Any, List, Optional
-from dataclasses import dataclass
+from typing import Dict, Any, List, Optional, Literal
+from dataclasses import dataclass, field
 import re
+
+
+# Format preference type aliases
+VerbosityLevel = Literal["brief", "standard", "detailed"]
+StructureHint = Literal["auto", "paragraph", "bullets", "steps", "table"]
+
+
+@dataclass
+class FormatPreference:
+    """User-specified output formatting derived from query text."""
+    verbosity: VerbosityLevel = "standard"
+    structure: StructureHint = "auto"
+    # Which raw phrase triggered each decision — for logging/debugging only
+    verbosity_trigger: Optional[str] = None
+    structure_trigger: Optional[str] = None
 
 
 @dataclass
@@ -16,6 +31,7 @@ class QueryUnderstanding:
     is_current_only: bool  # Whether to filter for current/active documents
     metadata_filters: Dict[str, Any]  # Filters to apply
     expanded_query: str  # Query with added terms for better retrieval
+    format_preference: FormatPreference = field(default_factory=FormatPreference)
 
 
 class QueryAnalyzer:
@@ -27,6 +43,38 @@ class QueryAnalyzer:
     
     def __init__(self):
         """Initialize query analyzer with comprehensive patterns."""
+        
+        # Format detection patterns (defined once, reused)
+        self.VERBOSITY_BRIEF = [
+            r"\b(in\s+short|tl;?dr|briefly|in\s+brief|one[\s-]line|short\s+answer|"
+            r"quick\s+answer|just\s+the\s+(gist|basics|key\s+points?)|summari[sz]e|"
+            r"summary|concise(ly)?)\b",
+        ]
+        
+        self.VERBOSITY_DETAILED = [
+            r"\b(in\s+detail|detailed|thorough(ly)?|comprehensive(ly)?|"
+            r"explain\s+(fully|thoroughly|in\s+depth)|elaborate|expand|long\s+answer|"
+            r"deep\s+dive|full\s+explanation)\b",
+        ]
+        
+        self.STRUCTURE_TABLE = [
+            r"\b(in\s+a?\s*table|tabular|as\s+a\s+table|table\s+format|in\s+rows)\b",
+        ]
+        
+        self.STRUCTURE_BULLETS = [
+            r"\b(in\s+bullets?|bullet\s+points?|as\s+bullets?|bulleted|"
+            r"as\s+a\s+(bulleted\s+)?list|point\s+wise|point[\s-]by[\s-]point)\b",
+        ]
+        
+        self.STRUCTURE_STEPS = [
+            r"\b(step[\s-]by[\s-]step|as\s+steps?|in\s+steps?|list\s+the\s+steps?|numbered\s+(list|steps)|"
+            r"walk\s+me\s+through|procedure|how[\s-]to\s+steps?)\b",
+        ]
+        
+        self.STRUCTURE_PARAGRAPH = [
+            r"\b(in\s+a?\s*paragraph|as\s+a\s+paragraph|in\s+prose|in\s+sentences|"
+            r"narrative\s+form)\b",
+        ]
         
         # Intent patterns - expanded with synonyms and variations
         self.intent_patterns = {
@@ -267,13 +315,17 @@ class QueryAnalyzer:
         # Expand query with synonyms and context
         expanded_query = self._expand_query(query_normalized, intent, entities)
         
+        # Detect format preference
+        format_preference = self._detect_format(query_lower)
+        
         return QueryUnderstanding(
             intent=intent,
             domain=domain,
             entities=entities,
             is_current_only=is_current_only,
             metadata_filters=metadata_filters,
-            expanded_query=expanded_query
+            expanded_query=expanded_query,
+            format_preference=format_preference
         )
     
     def _detect_document_scope_query(self, query: str) -> Optional[QueryUnderstanding]:
@@ -289,32 +341,22 @@ class QueryAnalyzer:
         """
         # Document-scoped broad query patterns
         document_patterns = [
-            # Long-form names with intent words
-            (r'(employee resource book|ERB)\s*(rules|policies|guidelines|content|information)',
+            (r'(employee resource book|ERB)\s*(rules|policies|guidelines|content|information)', 
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'(faculty academic guidelines|FAG)\s*(rules|policies|content|information)',
+            (r'(faculty academic guidelines|FAG)\s*(rules|policies|content|information)', 
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'(faculty applications compendium|FAC)\s*(rules|policies|content|information|forms)',
+            (r'(faculty applications compendium)\s*(rules|policies|content|information|forms)', 
              'NMIMS_Faculty_Applications_Compendium.pdf'),
-            (r'tell me (about|the)\s*(resource book|employee book|ERB)',
+            (r'tell me (about|the)\s*(resource book|employee book|ERB)', 
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'tell me (about|the)\s*(academic guidelines|FAG)',
+            (r'tell me (about|the)\s*(academic guidelines|FAG)', 
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'tell me (about|the)\s*(applications compendium|forms compendium|FAC)',
+            (r'tell me (about|the)\s*(applications compendium|forms compendium)', 
              'NMIMS_Faculty_Applications_Compendium.pdf'),
-            (r'what (is|are) (in|the)\s*(resource book|employee book|ERB)',
+            (r'what (is|are) (in|the)\s*(resource book|employee book|ERB)', 
              'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'what (is|are) (in|the)\s*(academic guidelines|FAG)',
+            (r'what (is|are) (in|the)\s*(academic guidelines|FAG)', 
              'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'what (is|are) (in|the)\s*(applications compendium|FAC)',
-             'NMIMS_Faculty_Applications_Compendium.pdf'),
-            # Short-form abbreviations used in isolation (as whole words)
-            (r'(?<![A-Za-z])ERB(?![A-Za-z])',
-             'NMIMS_Employee_Resource_Book_2024-25.pdf'),
-            (r'(?<![A-Za-z])FAG(?![A-Za-z])',
-             'NMIMS_Faculty_Academic_Guidelines.pdf'),
-            (r'(?<![A-Za-z])FAC(?![A-Za-z])',
-             'NMIMS_Faculty_Applications_Compendium.pdf'),
         ]
         
         for pattern, doc_name in document_patterns:
@@ -571,13 +613,20 @@ class QueryAnalyzer:
         query_words = set(query_lower.split())
         expansion_terms = [term for term in set(expansion_terms) if term.lower() not in query_words]
         
-        # Limit expansion based on query type
+        # R11: Limit expansion based on query specificity
+        # Specific queries (name, form code) get fewer expansion terms
+        # to avoid diluting the distinguishing signal
+        has_specific_entity = bool(entities) or bool(re.search(
+            r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', query_clean
+        ))
         if is_vague:
-            max_terms = 20  # More terms for vague queries
+            max_terms = 20
+        elif has_specific_entity:
+            max_terms = 5   # R11: cap for specific queries
         elif "faculty" in expansion_terms or "professor" in expansion_terms:
-            max_terms = 10  # Faculty queries
+            max_terms = 8
         else:
-            max_terms = 8  # Specific queries
+            max_terms = 8
         
         expansion_terms = expansion_terms[:max_terms]
         
@@ -623,67 +672,28 @@ class QueryAnalyzer:
     def _detect_intent(self, query: str) -> str:
         """
         Detect query intent using pattern matching with scoring.
-
+        
         Returns the intent with highest confidence score.
         """
-        # Form-code queries (e.g. "HR-LA-01", "Form CL-7") are actually
-        # procedure/how-to-fill questions — they should not fall through to
-        # policy_lookup. Catch them before generic scoring so the prompt
-        # router picks FORM_DETAILS_PROMPT / PROCEDURE_PROMPT.
-        form_code_re = re.compile(r'\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b', re.IGNORECASE)
-        form_code_present = bool(form_code_re.search(query))
-        procedure_verbs = any(
-            re.search(p, query, re.IGNORECASE) for p in [
-                r"\bhow\s+to\b", r"\bfill\b", r"\bsubmit\b",
-                r"\bapply\b", r"\bapplication\b", r"\bprocess\b",
-                r"\bprocedure\b", r"\bsteps\b", r"\brequest\b",
-            ]
-        )
-        form_noun = bool(re.search(r"\bform\b", query, re.IGNORECASE))
-        # Route form-centric queries to the form_details prompt so the LLM
-        # gets form-specific instructions (sections, fields, approval chain).
-        # Explicit how-to language still routes to procedure.
-        if form_code_present or form_noun:
-            if procedure_verbs and not form_code_present:
-                return "procedure"
-            if form_code_present and procedure_verbs:
-                return "procedure"
-            return "form_details"
-
-        # Definition-shaped queries — "what is a sabbatical", "define X",
-        # "meaning of Y" — should get the dictionary-style DEFINITION_PROMPT.
-        definition_patterns = [
-            r"^\s*define\s+\S+",
-            r"^\s*what\s+does\s+\S.+\s+mean",
-            r"\bmeaning\s+of\b",
-            r"\bdefinition\s+of\b",
-        ]
-        if any(re.search(p, query, re.IGNORECASE) for p in definition_patterns):
-            return "definition"
-
         intent_scores = {}
-
+        
         for intent, patterns in self.intent_patterns.items():
             score = 0
             for pattern in patterns:
                 if re.search(pattern, query, re.IGNORECASE):
                     score += 1
             intent_scores[intent] = score
-
+        
         # Return intent with highest score, or general if no matches
         if max(intent_scores.values()) > 0:
             top = max(intent_scores, key=intent_scores.get)
 
-            # Refine generic "lookup" into person_lookup vs policy_lookup so
-            # hybrid-search weights can differ for these two very different
-            # query shapes.
-            if top == "lookup":
-                # A bare form code with no surrounding procedure verbs is
-                # still a "what is this form" lookup — treat as procedure
-                # so the user gets step-by-step guidance.
-                if form_code_present:
-                    return "procedure"
+            # R10: eligibility takes priority — don't fall through to person/policy
+            if top == "eligibility" or intent_scores.get("eligibility", 0) > 0:
+                return "eligibility"
 
+            # Refine generic "lookup" into person_lookup / policy_lookup / topic_search
+            if top == "lookup":
                 person_signals = [
                     r"\b(dr|prof|professor|mr|ms|mrs|miss)\.?\b",
                     r"\bfaculty\b", r"\bteacher\b", r"\blecturer\b",
@@ -693,6 +703,8 @@ class QueryAnalyzer:
                 ]
                 policy_signals = [
                     r"\bpolicy\b", r"\bclause\b", r"\bsection\b",
+                    r"\bform\b", r"\bapplication\b",
+                    r"\b[A-Z]{2,3}-[A-Z]{1,3}-\d{1,3}\b",
                     r"\bleave\b", r"\bsabbatical\b", r"\bgratuity\b",
                     r"\bprovident\s+fund\b", r"\bmedical\s+reimbursement\b",
                     r"\bagreement\b", r"\bcontract\b",
@@ -704,6 +716,12 @@ class QueryAnalyzer:
                 policy_hits = sum(
                     1 for p in policy_signals if re.search(p, query, re.IGNORECASE)
                 )
+                # R1: topic_search — no person/policy signals but has a topic entity
+                topic_hits = len(re.findall(
+                    self.entity_patterns.get("topic", r"(?!)"), query, re.IGNORECASE
+                ))
+                if person_hits == 0 and policy_hits == 0 and topic_hits > 0:
+                    return "topic_search"
                 if policy_hits > person_hits:
                     return "policy_lookup"
                 return "person_lookup"
@@ -792,37 +810,81 @@ class QueryAnalyzer:
         self,
         domain: str,
         is_current_only: bool,
-        entities: List[str],
+        entities: List[str]
     ) -> Dict[str, Any]:
         """
-        Build Qdrant metadata filters for pre-search pruning.
+        Build metadata filters based on query understanding.
 
-        Strategy is intentionally conservative — over-filtering hurts recall
-        badly on small corpora, so we only attach filters for signals we're
-        confident about (e.g. an explicit "current/latest" request). Any key
-        we don't want to filter on is simply left off the returned dict;
-        downstream code treats an empty dict as "no filter applied".
+        Filters are applied during vector search to narrow results.
 
         Args:
-            domain: Detected domain (faculty_info, policies, procedures, ...)
-            is_current_only: True when the query asked for the latest version.
-            entities: Normalized entity tokens pulled from the query.
+            domain: Detected domain (faculty_info, policies, procedures)
+            is_current_only: Whether to filter for current documents
+            entities: Extracted entities (names, departments, etc.)
 
         Returns:
-            Dict suitable for ``VectorDBClient._build_filter``.
+            Dict of metadata filters for Qdrant
         """
-        filters: Dict[str, Any] = {}
+        filters = {}
 
-        # Only pre-filter on "current" when the user asked for it explicitly.
-        # We don't infer it from ambient context because the corpus is small
-        # and stale-document filtering cuts recall more than it helps.
-        if is_current_only:
-            filters["is_current"] = True
-
-        # Domain filtering is reserved for future extensions once we have
-        # enough document-level metadata to distinguish faculty-profile
-        # chunks from policy chunks reliably. Keeping it off for now.
+        # NOTE: `domain` and `is_current` are NOT currently written to chunk
+        # metadata during ingestion (see src/chunking/document_chunker.py).
+        # Emitting these as Qdrant filters caused every search to return zero
+        # hits. They are intentionally omitted until ingestion populates them.
+        # The detected values remain on the QueryUnderstanding object for
+        # downstream weighting/observability.
         _ = domain
-        _ = entities
+        _ = is_current_only
+
+        # Entity-based filtering (e.g., department, document type)
+        # This can be expanded based on your metadata schema
 
         return filters
+    
+    def _detect_format(self, query: str) -> FormatPreference:
+        """
+        Detect user format preferences from query text.
+        
+        Looks for verbosity cues (brief/detailed) and structure hints
+        (table/bullets/steps/paragraph).
+        
+        Args:
+            query: Lowercased query text
+        
+        Returns:
+            FormatPreference with detected verbosity and structure
+        """
+        pref = FormatPreference()
+        
+        # Verbosity — detailed wins over brief if both present (user usually means it)
+        for pat in self.VERBOSITY_DETAILED:
+            m = re.search(pat, query, re.IGNORECASE)
+            if m:
+                pref.verbosity = "detailed"
+                pref.verbosity_trigger = m.group(0)
+                break
+        else:
+            for pat in self.VERBOSITY_BRIEF:
+                m = re.search(pat, query, re.IGNORECASE)
+                if m:
+                    pref.verbosity = "brief"
+                    pref.verbosity_trigger = m.group(0)
+                    break
+        
+        # Structure — most-specific wins: table > steps > bullets > paragraph
+        for label, patterns in [
+            ("table", self.STRUCTURE_TABLE),
+            ("steps", self.STRUCTURE_STEPS),
+            ("bullets", self.STRUCTURE_BULLETS),
+            ("paragraph", self.STRUCTURE_PARAGRAPH),
+        ]:
+            for pat in patterns:
+                m = re.search(pat, query, re.IGNORECASE)
+                if m:
+                    pref.structure = label  # type: ignore
+                    pref.structure_trigger = m.group(0)
+                    break
+            if pref.structure != "auto":
+                break
+        
+        return pref

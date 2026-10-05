@@ -1,0 +1,115 @@
+# ============================================================================
+# ClassAI - Integrated Requirements
+# Python 3.10+
+# ============================================================================
+
+# ── Core Web Framework ──────────────────────────────────────────────────────
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.0
+aiofiles==23.2.1
+python-dotenv==1.0.0
+
+# ── Vector Database ─────────────────────────────────────────────────────────
+qdrant-client==1.9.0
+
+# ── LangChain (Student Part Ingestion) ──────────────────────────────────────
+langchain>=0.1.0
+langchain-community>=0.0.20
+langchain-core>=0.1.23
+langchain-ollama>=0.1.0
+langchain-qdrant>=0.1.0
+langchain-text-splitters>=0.0.1
+
+# ── Machine Learning & Embeddings ───────────────────────────────────────────
+# Core ML
+torch==2.1.2
+transformers==4.36.0
+sentence-transformers==2.3.1
+
+# Embeddings & Reranking
+FlagEmbedding==1.2.10
+fastembed==0.4.0
+
+# ── Search & Retrieval ──────────────────────────────────────────────────────
+rank-bm25==0.2.2
+nltk==3.8.1
+
+# ── Document Processing ─────────────────────────────────────────────────────
+# PDF Processing
+pymupdf>=1.24.0
+pypdf==3.17.4
+pdf2image>=1.17.0
+
+# OCR
+pytesseract==0.3.10
+Pillow>=10.3.0
+
+# Office Documents
+openpyxl==3.1.2
+
+# ── Caching & Performance ───────────────────────────────────────────────────
+redis==5.0.1
+diskcache==5.6.3
+
+# ── Security ────────────────────────────────────────────────────────────────
+bcrypt==4.1.2
+
+# ── Utilities ───────────────────────────────────────────────────────────────
+requests==2.31.0
+numpy==1.26.3
+tiktoken>=0.6.0
+
+# ── Development & Testing (Optional) ────────────────────────────────────────
+# Uncomment for development
+# pytest>=7.4.0
+# pytest-asyncio>=0.21.0
+# pytest-cov>=4.1.0
+# black>=23.0.0
+# flake8>=6.0.0
+# mypy>=1.5.0
+# ipython>=8.12.0
+# jupyter>=1.0.0
+
+# ============================================================================
+# Installation Instructions
+# ============================================================================
+#
+# 1. Create virtual environment:
+#    python -m venv venv
+#    source venv/bin/activate  # Linux/Mac
+#    venv\Scripts\activate     # Windows
+#
+# 2. Install dependencies:
+#    pip install -r requirements.txt
+#
+# 3. Install Ollama separately:
+#    https://ollama.ai
+#    ollama pull gemma3:12b
+#    ollama pull bge-m3
+#
+# 4. Start Qdrant:
+#    cd "Faculty Part"
+#    docker-compose up -d
+#
+# ============================================================================
+# Platform-Specific Notes
+# ============================================================================
+#
+# Windows:
+# - Install Visual C++ Build Tools for some packages
+# - Tesseract OCR: https://github.com/UB-Mannheim/tesseract/wiki
+#
+# macOS:
+# - brew install tesseract
+# - brew install poppler (for pdf2image)
+#
+# Linux:
+# - sudo apt-get install tesseract-ocr
+# - sudo apt-get install poppler-utils
+#
+# GPU Support (Optional):
+# - Replace torch==2.1.2 with:
+#   torch==2.1.2+cu118 -f https://download.pytorch.org/whl/torch_stable.html
+#
+# ============================================================================
