@@ -26,7 +26,7 @@ class LLMClient:
             temperature: Sampling temperature
         """
         self.provider = os.getenv("LLM_PROVIDER", "ollama").lower()
-        self.model = model or os.getenv("LLM_MODEL", "llama2")
+        self.model = model or os.getenv("LLM_MODEL", "gemma3:12b")
         self.temperature = temperature
         
         if self.provider == "gemini":
@@ -38,18 +38,28 @@ class LLMClient:
             print(f"✓ Model: {self.model}")
         else:
             self.base_url = base_url or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            # Test Ollama connection
-            try:
-                response = requests.get(f"{self.base_url}/api/tags", timeout=5)
-                response.raise_for_status()
-                print(f"✓ Connected to Ollama at {self.base_url}")
-                print(f"✓ Using model: {self.model}")
-            except requests.exceptions.RequestException as e:
-                raise ConnectionError(
-                    f"Cannot connect to Ollama at {self.base_url}. "
-                    f"Make sure Ollama is running. Error: {e}"
-                )
-    
+            self.ping()
+            print(f"✓ Connected to Ollama at {self.base_url}")
+            print(f"✓ Using model: {self.model}")
+
+    def ping(self) -> None:
+        """Raise ConnectionError if Ollama is down or the model is not pulled (no-op for Gemini)."""
+        if self.provider == "gemini":
+            return
+        try:
+            response = requests.get(f"{self.base_url}/api/tags", timeout=5)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            raise ConnectionError(
+                f"Cannot connect to Ollama at {self.base_url}. "
+                f"Make sure Ollama is running. Error: {e}"
+            )
+        pulled = {m.get("name") for m in response.json().get("models", [])}
+        if self.model not in pulled and f"{self.model}:latest" not in pulled:
+            raise ConnectionError(
+                f"Ollama model '{self.model}' is not pulled. Run: ollama pull {self.model}"
+            )
+
     def generate(
         self,
         prompt: str,

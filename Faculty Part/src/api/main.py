@@ -5,7 +5,7 @@ FastAPI application for Faculty Part RAG system.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, AsyncIterator
@@ -114,100 +114,83 @@ class QueryResponse(BaseModel):
 
 
 # Initialize components (in production, use dependency injection)
+FACULTY_DIR = Path(__file__).resolve().parents[2]  # "Faculty Part/", independent of CWD
+
 scope_router = None
 answer_generator = None
 cache_manager = None
 conversation_manager = None
 rate_limiter = None
+llm_client = None
+vector_db = None
 llm_semaphore = None  # Limit concurrent LLM calls
 active_tokens = {}  # Store active session tokens with role info
 
 
 async def startup_event():
-    """Initialize RAG components on startup."""
-    global scope_router, answer_generator, cache_manager, conversation_manager, rate_limiter, llm_semaphore
-    
+    """
+    Initialize RAG components on startup.
+
+    Any failure here (Qdrant or Ollama down, model missing) propagates so the
+    server refuses to start instead of running half-initialised.
+    """
+    global scope_router, answer_generator, cache_manager, conversation_manager
+    global rate_limiter, llm_semaphore, llm_client, vector_db
+
+    print("Initializing ClassAI Unified RAG system...")
+
+    # 20 req/min per IP, at most 3 concurrent LLM calls
+    rate_limiter = RateLimiter(max_requests=20, window_seconds=60)
+    llm_semaphore = asyncio.Semaphore(3)
+
+    cache_manager = CacheManager(
+        disk_cache_dir=str(FACULTY_DIR / "cache"),
+        enable_redis=False
+    )
+    # Collections may have been re-indexed since the last run, so cached
+    # answers could cite chunks that no longer exist.
+    cache_manager.clear()
+
+    conversation_manager = ConversationManager(
+        storage_dir=str(FACULTY_DIR / "conversations"),
+        max_history=10
+    )
+
+    vector_db = VectorDBClient()
     try:
-        # Initialize components
-        print("Initializing ClassAI Unified RAG system...")
-        
-        # Initialize rate limiter (20 req/min per IP)
-        rate_limiter = RateLimiter(max_requests=20, window_seconds=60)
-        
-        # Initialize LLM semaphore (max 3 concurrent LLM calls)
-        llm_semaphore = asyncio.Semaphore(3)
-        
-        # Initialize cache manager
-        cache_manager = CacheManager(
-            disk_cache_dir="./cache",
-            enable_redis=False  # Set to True if Redis is available
-        )
-        
-        # Initialize conversation manager
-        conversation_manager = ConversationManager(
-            storage_dir="./conversations",
-            max_history=10
-        )
-        
-        vector_db = VectorDBClient()
-        query_embedder = QueryEmbedder(model_name="BAAI/bge-m3")
-        llm_client = LLMClient()
-        
-        # Get collection names from environment
-        faculty_collection = os.getenv("FACULTY_COLLECTION_NAME", "faculty_chunks")
-        student_collection = os.getenv("STUDENT_COLLECTION_NAME", "academic_rag")
-        
-        # Create collections if they don't exist
-        try:
-            vector_db.create_collection(
-                collection_name=faculty_collection,
-                vector_size=query_embedder.get_dimension()
-            )
-            vector_db.create_collection(
-                collection_name=student_collection,
-                vector_size=query_embedder.get_dimension()
-            )
-        except Exception as e:
-            print(f"Collection already exists or creation failed: {e}")
-        
-        # Initialize scope router with two pipelines
-        print(f"Initializing scope router...")
-        print(f"  Faculty collection: {faculty_collection}")
-        print(f"  Student collection: {student_collection}")
-        
-        scope_router = ScopeRouter(
-            vector_db_client=vector_db,
-            embedding_model=query_embedder,
-            llm_client=llm_client,
-            faculty_collection_name=faculty_collection,
-            student_collection_name=student_collection
-        )
-        
-        # Build BM25 indexes for both collections
-        print("Loading BM25 indexes...")
-        try:
-            scope_router.faculty_pipeline.search_engine.build_bm25_index()
-            print(f"✓ Faculty BM25 index ready")
-        except Exception as e:
-            print(f"⚠ Faculty BM25 index build failed: {e}")
-        
-        try:
-            scope_router.student_pipeline.search_engine.build_bm25_index()
-            print(f"✓ Student BM25 index ready")
-        except Exception as e:
-            print(f"⚠ Student BM25 index build failed: {e}")
-        
-        # Initialize answer generator
-        answer_generator = AnswerGenerator(llm_client)
-        
-        print("✓ ClassAI Unified API started successfully")
-        print(f"  Collections: {faculty_collection}, {student_collection}")
-        print(f"  Role-based access control enabled")
-        
+        vector_db.client.get_collections()
     except Exception as e:
-        print(f"✗ Failed to initialize: {e}")
-        print("Make sure Qdrant is running and .env is configured")
-        traceback.print_exc()
+        raise RuntimeError(
+            f"Cannot reach Qdrant at {vector_db.url}. "
+            f"Start it with `docker compose up -d` in Faculty Part. ({e})"
+        ) from e
+
+    llm_client = LLMClient()  # raises ConnectionError if Ollama is unreachable
+    query_embedder = QueryEmbedder(model_name="BAAI/bge-m3")
+
+    faculty_collection = os.getenv("FACULTY_COLLECTION_NAME", "faculty_chunks")
+    student_collection = os.getenv("STUDENT_COLLECTION_NAME", "academic_rag")
+
+    # No-op when the collection already exists
+    for name in (faculty_collection, student_collection):
+        vector_db.create_collection(collection_name=name, vector_size=query_embedder.get_dimension())
+
+    scope_router = ScopeRouter(
+        vector_db_client=vector_db,
+        embedding_model=query_embedder,
+        llm_client=llm_client,
+        faculty_collection_name=faculty_collection,
+        student_collection_name=student_collection
+    )
+
+    print("Loading BM25 indexes...")
+    scope_router.faculty_pipeline.search_engine.build_bm25_index()
+    scope_router.student_pipeline.search_engine.build_bm25_index()
+
+    answer_generator = AnswerGenerator(llm_client)
+
+    print("✓ ClassAI Unified API started successfully")
+    print(f"  Collections: {faculty_collection}, {student_collection}")
 
 
 @app.get("/")
@@ -286,436 +269,260 @@ async def signout(req: Request):
     return {"status": "signed_out"}
 
 
+CONDENSE_PROMPT = """Rewrite the follow-up question as a standalone question that can be understood without the conversation. Keep names, form codes, course names and any formatting request (table, bullets, brief, detailed). If it is already standalone, return it unchanged.
+
+Conversation:
+{history}
+
+Follow-up question: {question}
+
+Standalone question (one line, no explanation):"""
+
+
+def _history_line(message: Dict[str, Any]) -> str:
+    """One line per stored message; assistant turns are stored as structured JSON."""
+    content = message.get("content", "")
+    if message.get("role") == "assistant":
+        try:
+            answer = json.loads(content)
+            content = " - ".join(p for p in (answer.get("title"), answer.get("subtitle")) if p)
+        except (ValueError, AttributeError):
+            pass
+        return f"Assistant: {content[:300]}"
+    return f"User: {content[:300]}"
+
+
+async def _standalone_query(query: str, session_id: Optional[str]) -> str:
+    """Resolve follow-ups ("what about unit 3?") against the session's history."""
+    history = conversation_manager.get_history(session_id, limit=6) if session_id else []
+    if not history:
+        return query
+    prompt = CONDENSE_PROMPT.format(
+        history="\n".join(_history_line(m) for m in history), question=query
+    )
+    try:
+        async with llm_semaphore:
+            rewritten = await asyncio.to_thread(
+                llm_client.generate, prompt, max_tokens=120, temperature=0.0
+            )
+    except Exception as e:
+        print(f"[CONDENSE] Failed, using original query: {e}")
+        return query
+    lines = (rewritten or "").strip().splitlines()
+    rewritten = lines[0].strip().strip('"') if lines else ""
+    if not rewritten or len(rewritten) > 500:
+        return query
+    if rewritten != query:
+        print(f"[CONDENSE] '{query[:60]}' -> '{rewritten[:80]}'")
+    return rewritten
+
+
+def _format_override(request: QueryRequest):
+    """Validated FormatPreference from the request, or None."""
+    if not request.format_override:
+        return None
+    from ..retrieval.query_understanding import FormatPreference
+    verbosity = request.format_override.get("verbosity", "standard")
+    structure = request.format_override.get("structure", "auto")
+    if verbosity not in ("brief", "standard", "detailed"):
+        verbosity = "standard"
+    if structure not in ("auto", "paragraph", "bullets", "steps", "table"):
+        structure = "auto"
+    return FormatPreference(
+        verbosity=verbosity,  # type: ignore
+        structure=structure,  # type: ignore
+        verbosity_trigger="API override",
+        structure_trigger="API override"
+    )
+
+
+def _fallback(intent: str, title: str, message: str, metadata: Dict[str, Any],
+              suggestions: Optional[List[str]] = None) -> Dict[str, Any]:
+    """Result shaped like a normal answer that the frontend renders as a fallback."""
+    sections = []
+    if suggestions:
+        sections.append({"heading": "Suggestions", "type": "bullets", "items": suggestions})
+    return {
+        "answer": json.dumps({
+            "intent": intent, "title": title, "subtitle": None, "sections": sections,
+            "footer": None, "confidence": "none", "fallback": message
+        }),
+        "sources": [],
+        "intent": intent,
+        "chunks_used": 0,
+        "metadata": metadata
+    }
+
+
+def _status(step: str, message: str) -> tuple:
+    return ("status", {"step": step, "message": message})
+
+
+async def _answer_events(request: QueryRequest, role: str, scope: str):
+    """
+    The full query pipeline, shared by the JSON and streaming endpoints.
+
+    Yields ("status", {...}) progress events, then exactly one ("result", {...}).
+    """
+    top_k = request.top_k or 20
+
+    yield _status("understanding", "Analyzing query...")
+    query = await _standalone_query(request.query, request.session_id)
+
+    # Role and scope change which collections are searched, so they are part
+    # of the key; otherwise switching scope would replay the previous answer.
+    cache_key = json.dumps([role, scope, request.format_override, query], sort_keys=True)
+    result = cache_manager.get_query_result(cache_key, top_k)
+
+    if result:
+        yield _status("cache_hit", "Found cached result")
+    else:
+        yield _status("retrieval", "Searching knowledge base...")
+        retrieval = await asyncio.to_thread(
+            scope_router.retrieve, query=query, role=role, scope=scope, top_k=top_k
+        )
+        print(f"[PIPELINE] Retrieved {len(retrieval['chunks'])} chunks")
+        metadata = {
+            **retrieval["metadata"],
+            "domain": retrieval.get("domain", "general"),
+            "entities": retrieval.get("entities", []),
+            "standalone_query": query,
+        }
+
+        if not retrieval["chunks"]:
+            result = _fallback(
+                retrieval["intent"], "No Results Found",
+                "I couldn't find any relevant information for your query. Please try rephrasing.",
+                metadata
+            )
+        else:
+            yield _status("generation", "Generating answer...")
+            async with llm_semaphore:
+                answer = await asyncio.to_thread(
+                    answer_generator.generate,
+                    query=query,
+                    retrieved_chunks=retrieval["chunks"],
+                    intent_type=retrieval["intent"],
+                    format_preference=_format_override(request) or retrieval.get("format_preference")
+                )
+
+            confidence = answer.get("confidence", "high")
+            if confidence == "none":
+                result = _fallback(
+                    retrieval["intent"], "Unable to Find Reliable Information",
+                    "I couldn't find reliable information to answer your question.",
+                    {**metadata, "confidence_level": confidence},
+                    suggestions=retrieval["metadata"].get("reformulation_suggestions")
+                    or ["Try being more specific", "Include relevant keywords"]
+                )
+            else:
+                # "low" answers are shown with the frontend's verify-with-source warning
+                structured = {**answer["structured"], "confidence": confidence}
+                result = {
+                    "answer": json.dumps(structured),
+                    "sources": answer["sources"],
+                    "intent": retrieval["intent"],
+                    "chunks_used": answer["chunks_used"],
+                    "metadata": {**metadata, "structured": structured, "confidence_level": confidence}
+                }
+                cache_manager.set_query_result(cache_key, top_k, result, ttl=3600)
+
+    if request.session_id:
+        conversation_manager.add_message(request.session_id, "user", request.query)
+        conversation_manager.add_message(
+            request.session_id, "assistant", result["answer"],
+            metadata={"sources": result["sources"], "intent": result["intent"]}
+        )
+
+    yield ("result", result)
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query_faculty_resources(request: QueryRequest, req: Request):
     """
     Query resources using semantic RAG with role-based scope routing.
-    
-    Pipeline:
-    1. Extract role from Authorization header (server-side source of truth)
-    2. Enforce scope based on role (student → student only)
-    3. Rate limiting check
-    4. Check cache for recent identical queries
-    5. Scope-based retrieval (student/faculty/both collections)
-    6. Structured JSON generation (with LLM semaphore)
-    7. Save to conversation history
-    """
-    # ── Extract role from Authorization header ──────────────────────
-    auth_header = req.headers.get("Authorization", "")
-    token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
 
-    # Get role from server-side token storage (A2: never trust client)
-    if token and token in active_tokens:
-        role = active_tokens[token]["role"]
-    else:
-        # No valid token → default to most restrictive (student)
-        role = "student"
-        print(f"[AUTH] No valid token, defaulting to role=student")
-    
-    # ── Sanitize and log query ──────────────────────────────────────
-    raw_query = request.query or ""
-    query = re.sub(r'\s+', ' ', raw_query).strip()
-    
-    # Get scope from request (will be enforced by ScopeRouter)
+    The role comes from the server-side token store, never from the client;
+    requests without a valid token are treated as student.
+    """
+    auth_header = req.headers.get("Authorization", "")
+    token = auth_header[len("Bearer "):].strip() if auth_header.startswith("Bearer ") else None
+    role = active_tokens[token]["role"] if token in active_tokens else "student"
+
+    query = re.sub(r'\s+', ' ', request.query or "").strip()
     scope = request.scope or "both"
-    
-    print(f"\n{'='*50}")
-    print(f"[QUERY] Raw: '{raw_query[:80]}'")
-    print(f"[QUERY] Clean: '{query[:80]}'")
-    print(f"[QUERY] Role: {role}")
-    print(f"[QUERY] Scope (requested): {scope}")
-    print(f"[QUERY] Session: {request.session_id}")
-    print(f"[QUERY] Stream: {request.stream}")
-    print(f"{'='*50}")
-    
-    if not scope_router or not answer_generator:
-        raise HTTPException(
-            status_code=503,
-            detail="RAG system not initialized. Check server logs."
-        )
-    
-    # Rate limiting check
-    client_ip = req.client.host
-    is_allowed, retry_after = await rate_limiter.is_allowed(client_ip)
+    print(f"\n[QUERY] '{query[:80]}' role={role} scope={scope} "
+          f"session={request.session_id} stream={request.stream}")
+
+    is_allowed, retry_after = await rate_limiter.is_allowed(req.client.host)
     if not is_allowed:
-        raise HTTPException(
-            status_code=429,
-            detail="Too many requests",
-            headers={"Retry-After": str(retry_after)}
-        )
-    
-    # Validate input
-    if not query or len(query) == 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Query cannot be empty"
-        )
-    
+        raise HTTPException(status_code=429, detail="Too many requests",
+                            headers={"Retry-After": str(retry_after)})
+
     if len(query) < 2:
-        raise HTTPException(
-            status_code=400,
-            detail="Query too short (minimum 2 characters)"
-        )
-    
+        raise HTTPException(status_code=400, detail="Query too short (minimum 2 characters)")
     if len(query) > 10000:
-        raise HTTPException(
-            status_code=400,
-            detail="Query too long (max 10000 characters)"
-        )
-    
+        raise HTTPException(status_code=400, detail="Query too long (max 10000 characters)")
     if request.top_k and (request.top_k < 1 or request.top_k > 50):
-        raise HTTPException(
-            status_code=400,
-            detail="top_k must be between 1 and 50"
-        )
-    
-    # Update request with sanitized query
+        raise HTTPException(status_code=400, detail="top_k must be between 1 and 50")
+
     request.query = query
-    
-    # Handle streaming request
+
     if request.stream:
-        # Pass role through request metadata (not ideal but works for demo)
-        # In production, use proper context/dependency injection
-        return StreamingResponse(
-            stream_query_response(request, role, scope),
-            media_type="text/event-stream"
-        )
-    
+        return StreamingResponse(stream_query_response(request, role, scope),
+                                 media_type="text/event-stream")
+
     try:
-        # Check cache first
-        cached_result = cache_manager.get_query_result(request.query, request.top_k or 20)
-        if cached_result:
-            print(f"Cache hit for query: {request.query[:50]}...")
-            
-            # Add to conversation history
-            if request.session_id:
-                conversation_manager.add_message(
-                    request.session_id,
-                    "user",
-                    request.query
-                )
-                conversation_manager.add_message(
-                    request.session_id,
-                    "assistant",
-                    cached_result["answer"],
-                    metadata={
-                        "sources": cached_result["sources"],
-                        "intent": cached_result["intent"],
-                        "cached": True
-                    }
-                )
-            
-            return QueryResponse(**cached_result)
-        
-        print(f"[PIPELINE] Starting retrieval for: {request.query[:50]}...")
-        
-        # Retrieve relevant chunks using scope router
-        retrieval_result = await asyncio.to_thread(
-            scope_router.retrieve,
-            query=request.query,
-            role=role,
-            scope=scope,
-            top_k=request.top_k or 20
-        )
-        
-        print(f"[PIPELINE] Retrieval complete. Found {len(retrieval_result['chunks'])} chunks")
-        
-        # Apply format override if provided
-        format_preference = retrieval_result.get("format_preference")
-        if request.format_override:
-            from ..retrieval.query_understanding import FormatPreference
-            
-            # Validate and apply override
-            verbosity = request.format_override.get("verbosity", "standard")
-            structure = request.format_override.get("structure", "auto")
-            
-            # Validate values
-            valid_verbosity = ["brief", "standard", "detailed"]
-            valid_structure = ["auto", "paragraph", "bullets", "steps", "table"]
-            
-            if verbosity not in valid_verbosity:
-                print(f"[WARNING] Invalid verbosity override: {verbosity}, ignoring")
-                verbosity = "standard"
-            
-            if structure not in valid_structure:
-                print(f"[WARNING] Invalid structure override: {structure}, ignoring")
-                structure = "auto"
-            
-            format_preference = FormatPreference(
-                verbosity=verbosity,  # type: ignore
-                structure=structure,  # type: ignore
-                verbosity_trigger="API override",
-                structure_trigger="API override"
-            )
-            print(f"[FORMAT] Override applied: verbosity={verbosity}, structure={structure}")
-        
-        # Check if any chunks were retrieved
-        if not retrieval_result["chunks"]:
-            fallback_response = {
-                "answer": json.dumps({
-                    "intent": "general",
-                    "title": "No Results Found",
-                    "subtitle": None,
-                    "sections": [],
-                    "footer": None,
-                    "confidence": "none",
-                    "fallback": "I couldn't find any relevant information for your query. Please try rephrasing or contact support."
-                }),
-                "sources": [],
-                "intent": retrieval_result["intent"],
-                "chunks_used": 0,
-                "metadata": {
-                    **retrieval_result["metadata"],
-                    "domain": retrieval_result.get("domain", "general"),
-                    "entities": retrieval_result.get("entities", []),
-                    "processing_steps": []
-                }
-            }
-            return QueryResponse(**fallback_response)
-        
-        # Generate structured JSON answer with LLM semaphore
-        async with llm_semaphore:
-            answer_result = await asyncio.to_thread(
-                answer_generator.generate,
-                query=request.query,
-                retrieved_chunks=retrieval_result["chunks"],
-                intent_type=retrieval_result["intent"],
-                format_preference=format_preference
-            )
-        
-        # Check confidence and handle low-confidence responses
-        confidence = answer_result.get("confidence", "high")
-        if confidence == "low" or confidence == "none":
-            suggestions = retrieval_result["metadata"].get("reformulation_suggestions", [])
-            fallback_response = {
-                "answer": json.dumps({
-                    "intent": retrieval_result["intent"],
-                    "title": "Unable to Find Reliable Information",
-                    "subtitle": None,
-                    "sections": [{
-                        "heading": "Suggestions",
-                        "type": "bullets",
-                        "items": suggestions if suggestions else ["Try being more specific", "Include relevant keywords"]
-                    }],
-                    "footer": "If you need immediate assistance, please contact support directly.",
-                    "confidence": "none",
-                    "fallback": "I couldn't find reliable information to answer your question."
-                }),
-                "sources": [],
-                "intent": retrieval_result["intent"],
-                "chunks_used": 0,
-                "metadata": {**retrieval_result["metadata"], "confidence_level": confidence}
-            }
-            return QueryResponse(**fallback_response)
-        
-        # Add processing steps to metadata
-        processing_steps = [
-            {"step": "Query Understanding", "status": "completed", "details": f"Intent: {retrieval_result['intent']}, Domain: {retrieval_result.get('domain', 'general')}"},
-            {"step": "Document Retrieval", "status": "completed", "details": f"Found {len(retrieval_result['chunks'])} relevant chunks"},
-            {"step": "Answer Generation", "status": "completed", "details": f"Generated {retrieval_result['intent']} response"}
-        ]
-        
-        result = {
-            "answer": json.dumps(answer_result["structured"]),
-            "sources": answer_result["sources"],
-            "intent": retrieval_result["intent"],
-            "chunks_used": answer_result["chunks_used"],
-            "metadata": {
-                **retrieval_result["metadata"],
-                "domain": retrieval_result.get("domain", "general"),
-                "entities": retrieval_result.get("entities", []),
-                "structured": answer_result["structured"],
-                "processing_steps": processing_steps
-            }
-        }
-        
-        # Cache the result
-        cache_manager.set_query_result(request.query, request.top_k or 20, result, ttl=3600)
-        
-        # Add to conversation history
-        if request.session_id:
-            conversation_manager.add_message(
-                request.session_id,
-                "user",
-                request.query
-            )
-            conversation_manager.add_message(
-                request.session_id,
-                "assistant",
-                result["answer"],
-                metadata={
-                    "sources": result["sources"],
-                    "intent": result["intent"]
-                }
-            )
-        
-        return QueryResponse(**result)
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print("=" * 80)
-        print("CRITICAL ERROR IN QUERY ENDPOINT")
-        print("=" * 80)
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("\nFull traceback:")
-        print(traceback.format_exc())
-        print("=" * 80)
-        
-        # Return user-friendly error
-        raise HTTPException(
-            status_code=500,
-            detail="An error occurred while processing your query. Please try again or contact support if the issue persists."
-        )
+        async for kind, payload in _answer_events(request, role, scope):
+            if kind == "result":
+                return QueryResponse(**payload)
+    except Exception:
+        print("[QUERY ERROR]\n" + traceback.format_exc())
+    raise HTTPException(
+        status_code=500,
+        detail="An error occurred while processing your query. Check the server log."
+    )
 
 
 @app.get("/health")
 async def health_check():
-    """Detailed health check."""
-    cache_stats = cache_manager.get_stats() if cache_manager else {}
-    
-    return {
-        "status": "healthy",
+    """Live check of Qdrant and the LLM backend; 503 if either is unreachable."""
+    checks = {}
+    try:
+        await asyncio.to_thread(vector_db.client.get_collections)
+        checks["qdrant"] = "ok"
+    except Exception as e:
+        checks["qdrant"] = f"error: {e}"
+    try:
+        await asyncio.to_thread(llm_client.ping)
+        checks["llm"] = "ok"
+    except Exception as e:
+        checks["llm"] = f"error: {e}"
+
+    healthy = all(v == "ok" for v in checks.values())
+    body = {
+        "status": "healthy" if healthy else "degraded",
         "service": "ClassAI Unified",
-        "version": "0.1.0",
-        "components": {
-            "scope_router": scope_router is not None,
-            "answer_generator": answer_generator is not None,
-            "cache_manager": cache_manager is not None,
-            "conversation_manager": conversation_manager is not None,
-        },
+        "checks": checks,
         "collections": {
             "faculty": os.getenv("FACULTY_COLLECTION_NAME", "faculty_chunks"),
             "student": os.getenv("STUDENT_COLLECTION_NAME", "academic_rag")
         },
-        "cache_stats": cache_stats
+        "cache_stats": cache_manager.get_stats(),
     }
+    return JSONResponse(body, status_code=200 if healthy else 503)
 
 
 async def stream_query_response(request: QueryRequest, role: str, scope: str) -> AsyncIterator[str]:
-    """
-    Stream query response as Server-Sent Events.
-    
-    Args:
-        request: Query request
-        role: User role (from token)
-        scope: Scope preference
-    
-    Yields:
-        SSE formatted events with progressive response
-    """
+    """Stream the shared pipeline as Server-Sent Events."""
     try:
-        print(f"[SSE] Starting stream for: '{request.query[:60]}'")
-        
-        # Send initial event
-        yield f"event: status\ndata: {json.dumps({'step': 'understanding', 'message': 'Analyzing query...'})}\n\n"
-        await asyncio.sleep(0.1)
-        
-        # Check cache
-        cached_result = cache_manager.get_query_result(request.query, request.top_k or 20)
-        if cached_result:
-            print(f"[SSE] Cache hit")
-            yield f"event: status\ndata: {json.dumps({'step': 'cache_hit', 'message': 'Found cached result'})}\n\n"
-            yield f"event: result\ndata: {json.dumps(cached_result)}\n\n"
-            yield "event: done\ndata: {}\n\n"
-            return
-        
-        # Retrieve chunks
-        print(f"[SSE] Starting retrieval")
-        yield f"event: status\ndata: {json.dumps({'step': 'retrieval', 'message': 'Searching knowledge base...'})}\n\n"
-        
-        retrieval_result = await asyncio.to_thread(
-            scope_router.retrieve,
-            query=request.query,
-            role=role,
-            scope=scope,
-            top_k=request.top_k or 20
-        )
-        
-        print(f"[SSE] Retrieval complete: {len(retrieval_result['chunks'])} chunks")
-        
-        # Apply format override if provided
-        format_preference = retrieval_result.get("format_preference")
-        if request.format_override:
-            from ..retrieval.query_understanding import FormatPreference
-            
-            verbosity = request.format_override.get("verbosity", "standard")
-            structure = request.format_override.get("structure", "auto")
-            
-            valid_verbosity = ["brief", "standard", "detailed"]
-            valid_structure = ["auto", "paragraph", "bullets", "steps", "table"]
-            
-            if verbosity not in valid_verbosity:
-                verbosity = "standard"
-            if structure not in valid_structure:
-                structure = "auto"
-            
-            format_preference = FormatPreference(
-                verbosity=verbosity,  # type: ignore
-                structure=structure,  # type: ignore
-                verbosity_trigger="API override",
-                structure_trigger="API override"
-            )
-        
-        if not retrieval_result["chunks"]:
-            print(f"[SSE] No chunks found")
-            yield f"event: error\ndata: {json.dumps({'message': 'No relevant documents found'})}\n\n"
-            yield "event: done\ndata: {}\n\n"
-            return
-        
-        # Generate answer
-        print(f"[SSE] Starting generation")
-        yield f"event: status\ndata: {json.dumps({'step': 'generation', 'message': 'Generating answer...'})}\n\n"
-        
-        answer_result = await asyncio.to_thread(
-            answer_generator.generate,
-            query=request.query,
-            retrieved_chunks=retrieval_result["chunks"],
-            intent_type=retrieval_result["intent"],
-            format_preference=format_preference
-        )
-        
-        print(f"[SSE] Generation complete")
-        
-        # Send result
-        result = {
-            "answer": json.dumps(answer_result["structured"]),
-            "sources": answer_result["sources"],
-            "intent": retrieval_result["intent"],
-            "chunks_used": answer_result["chunks_used"],
-            "metadata": retrieval_result["metadata"]
-        }
-        
-        # Cache it
-        cache_manager.set_query_result(request.query, request.top_k or 20, result, ttl=3600)
-        
-        # Add to conversation
-        if request.session_id:
-            conversation_manager.add_message(request.session_id, "user", request.query)
-            conversation_manager.add_message(
-                request.session_id,
-                "assistant",
-                result["answer"],
-                metadata={"sources": result["sources"], "intent": result["intent"]}
-            )
-        
-        yield f"event: result\ndata: {json.dumps(result)}\n\n"
-        yield "event: done\ndata: {}\n\n"
-        print(f"[SSE] Stream complete")
-        
-    except Exception as e:
-        print("=" * 80)
-        print("[SSE ERROR] Exception in stream handler")
-        print("=" * 80)
-        print(f"Error type: {type(e).__name__}")
-        print(f"Error message: {str(e)}")
-        print("\nFull traceback:")
-        print(traceback.format_exc())
-        print("=" * 80)
-        
-        yield f"event: error\ndata: {json.dumps({'message': 'Something went wrong while answering. Check the server log.'})}\n\n"
-        yield "event: done\ndata: {}\n\n"
+        async for kind, payload in _answer_events(request, role, scope):
+            yield f"event: {kind}\ndata: {json.dumps(payload)}\n\n"
+    except Exception:
+        print("[SSE ERROR]\n" + traceback.format_exc())
+        message = "Something went wrong while answering. Check the server log."
+        yield f"event: error\ndata: {json.dumps({'message': message})}\n\n"
+    yield "event: done\ndata: {}\n\n"
 
 
 @app.post("/conversation/new")

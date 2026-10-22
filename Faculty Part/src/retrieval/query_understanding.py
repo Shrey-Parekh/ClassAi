@@ -669,14 +669,41 @@ class QueryAnalyzer:
         
         return variations
     
+    def _detect_form_intent(self, query: str) -> Optional[str]:
+        """
+        Route form questions before generic scoring, which otherwise reads
+        "list all forms" as a lookup and "what is HR-LA-01" as a policy.
+
+        - how to fill / submit a form  -> procedure
+        - all / list / every + forms   -> document_overview
+        - a form code, or "this form"  -> form_details
+        """
+        # Form codes look like HR-LA-01; the middle letter segment keeps
+        # course outcomes (CO-2, SO-1) and course codes (CS-101) out.
+        has_code = re.search(r"\b[a-z]{2,4}(?:-[a-z]{1,4}){1,2}-\d{1,3}\b", query, re.IGNORECASE)
+        mentions_form = re.search(r"\bforms?\b|\bform\s+codes?\b", query, re.IGNORECASE)
+        if not (has_code or mentions_form):
+            return None
+        if re.search(r"\bhow\s+(do|to|can|should)\b|\bfill(ing)?\b|\bsubmit\b", query, re.IGNORECASE):
+            return "procedure"
+        if mentions_form and re.search(r"\b(all|list|every|each)\b", query, re.IGNORECASE):
+            return "document_overview"
+        if has_code or re.search(r"\b(this|that)\s+form\b", query, re.IGNORECASE):
+            return "form_details"
+        return None
+
     def _detect_intent(self, query: str) -> str:
         """
         Detect query intent using pattern matching with scoring.
         
         Returns the intent with highest confidence score.
         """
+        form_intent = self._detect_form_intent(query)
+        if form_intent:
+            return form_intent
+
         intent_scores = {}
-        
+
         for intent, patterns in self.intent_patterns.items():
             score = 0
             for pattern in patterns:

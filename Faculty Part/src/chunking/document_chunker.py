@@ -558,11 +558,11 @@ class DocumentChunker:
 
         # Fallback: if the strict boundary found nothing, fall back to the
         # loose institution-header split (also DOTALL-safe), then to ALL-CAPS form title split.
-        if len(form_sections) <= 2:
+        if len(form_sections) == 1:
             form_boundary_loose = r'\n(?=NMIMS[\s\S]{1,10}Narsee Monjee Institute of Management Studies)'
             form_sections = re.split(form_boundary_loose, text)
 
-        if len(form_sections) <= 2:
+        if len(form_sections) == 1:
             form_boundary_alt = r'\n(?=[A-Z][A-Z\s]+FORM\s*\n)'
             form_sections = re.split(form_boundary_alt, text)
 
