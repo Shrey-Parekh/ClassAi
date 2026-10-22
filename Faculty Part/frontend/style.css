@@ -32,11 +32,11 @@
     font-size: clamp(2.4rem, 4.4vw, 3.6rem);
     line-height: 1.04;
     letter-spacing: -.03em;
-    max-width: 15ch;
+    max-width: 20ch;
     padding-bottom: 4px;
 }
 
-/* Signature: a highlighter pass over the part that matters, drawn once */
+/* Highlighter mark on the key phrase, drawn once on load */
 .hl {
     color: inherit;
     background-color: transparent;
@@ -159,7 +159,7 @@
 .footer-note { flex: 1; font-size: 14px; color: var(--ink-3); }
 .footer-year { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-3); }
 
-/* ── Motion: one orchestrated load moment, then quiet section reveals ──── */
+/* ── Motion: hero entrance on load, sections fade in on scroll ────────── */
 @media (prefers-reduced-motion: no-preference) {
     .hero-title, .hero-sub, .hero-actions, .specimen, .specimen-q,
     .specimen .response-container > * {

@@ -64,7 +64,7 @@ if (mobileMenuToggle && sidebar && mobileBackdrop) {
         sidebar.removeAttribute('aria-hidden');
         mobileBackdrop.classList.add('active');
         mobileMenuToggle.setAttribute('aria-expanded', 'true');
-        // A37: move focus into sidebar
+        // move focus into sidebar
         const firstBtn = sidebar.querySelector('button, a');
         if (firstBtn) firstBtn.focus();
     }
@@ -90,7 +90,7 @@ if (mobileMenuToggle && sidebar && mobileBackdrop) {
 let currentSessionId = null;
 let sessionReady = false;
 
-// A8: keep sendBtn disabled until session is ready
+// keep sendBtn disabled until session is ready
 async function initSession() {
     sessionReady = false;
     sendBtn.disabled = true;
@@ -155,7 +155,7 @@ validateToken().then(valid => {
     }
 });
 
-// ── Textarea auto-resize (A20: capped at 200px) ───────────────────────────────
+// ── Textarea auto-resize (capped at 200px) ───────────────────────────────
 userInput.addEventListener('input', function () {
     this.style.height = 'auto';
     this.style.height = Math.min(this.scrollHeight, 200) + 'px';
@@ -173,7 +173,7 @@ document.querySelectorAll('.suggestion').forEach(btn => {
     });
 });
 
-// ── Scroll helper (A25: throttled) ───────────────────────────────────────────
+// ── Scroll helper (throttled) ───────────────────────────────────────────
 let _scrollRaf = null;
 function scrollToBottom() {
     if (_scrollRaf) return;
@@ -209,7 +209,7 @@ function addMessage(content, isUser) {
         const copyBtn = document.createElement('button');
         copyBtn.className = 'copy-btn';
         copyBtn.setAttribute('aria-label', 'Copy message');
-        // A36: aria-live for screen reader feedback
+        // aria-live for screen reader feedback
         const copyStatus = document.createElement('span');
         copyStatus.setAttribute('aria-live', 'polite');
         copyStatus.setAttribute('aria-atomic', 'true');
@@ -227,7 +227,7 @@ function addMessage(content, isUser) {
     if (isUser) contentDiv.textContent = content;
 
     scrollToBottom();
-    lucide.createIcons({ nodes: [wrapper] }); // A32: scope to new node only
+    lucide.createIcons({ nodes: [wrapper] }); // scope to new node only
 
     return { messageDiv, contentDiv, wrapper };
 }
@@ -294,7 +294,7 @@ function removeTypingIndicator() {
 
 // ── Abort controller (A10) ────────────────────────────────────────────────────
 let currentAbortController = null;
-let isSending = false; // A9: duplicate-submit guard
+let isSending = false; // duplicate-submit guard
 
 stopBtn.addEventListener('click', () => {
     if (currentAbortController) {
@@ -349,7 +349,7 @@ async function sendQuery(query) {
 
         while (true) {
             const { done, value } = await reader.read();
-            // A7: flush remaining buffer on stream close
+            // flush remaining buffer on stream close
             if (done) {
                 if (buffer.trim()) {
                     processLine(buffer.trim());
@@ -364,7 +364,7 @@ async function sendQuery(query) {
 
         function processLine(line) {
             if (!line.startsWith('data:')) return;
-            // A6: safe JSON parse
+            // safe JSON parse
             let data;
             try { data = JSON.parse(line.substring(5).trim()); }
             catch { return; }
@@ -438,7 +438,7 @@ async function sendQuery(query) {
             }
             errorDiv.appendChild(h);
             errorDiv.appendChild(p);
-            // A22: retry button
+            // retry button
             const retryBtn = document.createElement('button');
             retryBtn.className = 'retry-btn';
             retryBtn.textContent = 'Retry';
@@ -479,7 +479,7 @@ userInput.addEventListener('keydown', (e) => {
     }
 });
 
-// ── New chat (A23: notify backend) ────────────────────────────────────────────
+// ── New chat (notify backend) ────────────────────────────────────────────
 async function startNewChat() {
     if (currentSessionId) {
         try {
@@ -495,7 +495,7 @@ async function startNewChat() {
     await initSession();
 }
 
-// ── Sign out (A24: call backend) ──────────────────────────────────────────────
+// ── Sign out (call backend) ──────────────────────────────────────────────
 async function signOut() {
     try {
         const token = sessionStorage.getItem('classai_token');
@@ -569,9 +569,9 @@ async function copyMessage(contentDiv, button, statusEl) {
     }
     const span = button.querySelector('span:not(.sr-only)');
     const original = span.textContent;
-    span.textContent = 'Copied!';
-    button.setAttribute('aria-label', 'Copied!');
-    // A36: announce to screen readers
+    span.textContent = 'Copied';
+    button.setAttribute('aria-label', 'Copied');
+    // announce to screen readers
     if (statusEl) statusEl.textContent = 'Message copied to clipboard';
     setTimeout(() => {
         span.textContent = original;

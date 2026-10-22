@@ -1,6 +1,6 @@
 const API_URL = '';  // same origin as the page
 
-// A32: scope lucide to the toggle button only
+// scope lucide to the toggle button only
 const eyeToggle = document.getElementById('eyeToggle');
 eyeToggle.addEventListener('click', function () {
     const input = document.getElementById('passwordInput');
@@ -12,7 +12,7 @@ eyeToggle.addEventListener('click', function () {
     lucide.createIcons({ nodes: [this] });
 });
 
-// A30: clear error on input
+// clear error on input
 ['emailInput', 'passwordInput'].forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
         document.getElementById('signinError').textContent = '';
@@ -38,7 +38,7 @@ document.getElementById('signinForm').addEventListener('submit', async function 
     btn.textContent = 'Signing in…';
 
     try {
-        // A2: do NOT send role — server determines role from credentials
+        // do not send the role; the server determines role from credentials
         const res = await fetch(`${API_URL}/api/auth/signin`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
