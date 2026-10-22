@@ -6,8 +6,9 @@ eyeToggle.addEventListener('click', function () {
     const input = document.getElementById('passwordInput');
     const isPassword = input.type === 'password';
     input.type = isPassword ? 'text' : 'password';
-    const icon = this.querySelector('i');
-    icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+    // lucide replaces <i> with <svg>, so swap the whole icon node
+    this.innerHTML = `<i data-lucide="${isPassword ? 'eye-off' : 'eye'}" aria-hidden="true"></i>`;
+    this.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
     lucide.createIcons({ nodes: [this] });
 });
 
@@ -29,7 +30,7 @@ document.getElementById('signinForm').addEventListener('submit', async function 
     errEl.textContent = '';
 
     if (!email || !password) {
-        errEl.textContent = 'Please fill in all fields.';
+        errEl.textContent = 'Enter your email and password.';
         return;
     }
 
@@ -47,7 +48,9 @@ document.getElementById('signinForm').addEventListener('submit', async function 
         const data = await res.json();
 
         if (!res.ok) {
-            errEl.textContent = data.error || 'Invalid credentials. Try again.';
+            errEl.textContent = res.status === 401
+                ? 'That email and password do not match an account.'
+                : (data.detail || 'Sign-in failed. Try again.');
             btn.disabled = false;
             btn.textContent = 'Sign in';
             return;
@@ -61,7 +64,7 @@ document.getElementById('signinForm').addEventListener('submit', async function 
         window.location.href = '/chat';
 
     } catch (err) {
-        errEl.textContent = 'Network error. Check your connection.';
+        errEl.textContent = 'Could not reach the server. Check that it is running.';
         btn.disabled = false;
         btn.textContent = 'Sign in';
     }

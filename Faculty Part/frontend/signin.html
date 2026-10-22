@@ -3,76 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#0a0a0a">
+    <meta name="theme-color" content="#F3F5F8" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0E1120" media="(prefers-color-scheme: dark)">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com https://fonts.googleapis.com 'unsafe-inline'; font-src https://cdn.fontshare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
-    <title>Sign In · ClassAI</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+    <title>Sign in · ClassAI</title>
+    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800&f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="/static/signin.css">
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 </head>
 <body class="signin-body">
-    <!-- A39: main landmark -->
-    <main>
-    <div class="signin-shell">
+    <header class="signin-top">
+        <a href="/" class="brand" aria-label="ClassAI home">
+            <span class="brand-mark" aria-hidden="true">C</span>
+            <span class="brand-name">ClassAI</span>
+        </a>
+    </header>
+
+    <main class="signin-shell">
         <div class="signin-card">
-            <div class="signin-logo">
-                <div class="product-initial">C</div>
-                <div class="product-labels">
-                    <span class="product-name">ClassAI</span>
-                    <span class="product-meta">NMIMS</span>
-                </div>
-            </div>
+            <h1 class="signin-title">Sign in</h1>
+            <p class="signin-sub">Use the account your administrator set up. Your role decides which documents you can search.</p>
 
-            <div class="signin-head">
-                <h1 class="signin-title">Sign in</h1>
-                <p class="signin-sub">Access is scoped to your assigned role. Contact your administrator if you need an account.</p>
-            </div>
-
-            <form id="signinForm" autocomplete="off" novalidate>
+            <form id="signinForm" novalidate>
                 <div class="signin-field">
                     <label class="signin-label" for="emailInput">Email</label>
-                    <input
-                        id="emailInput"
-                        class="signin-input"
-                        type="email"
-                        placeholder="you@nmims.edu"
-                        autocomplete="email"
-                        required
-                    />
+                    <input id="emailInput" class="signin-input" type="email"
+                           placeholder="you@nmims.edu" autocomplete="email" required>
                 </div>
 
                 <div class="signin-field">
                     <label class="signin-label" for="passwordInput">Password</label>
                     <div class="signin-input-wrap">
-                        <input
-                            id="passwordInput"
-                            class="signin-input"
-                            type="password"
-                            placeholder="Password"
-                            autocomplete="current-password"
-                            required
-                        />
-                        <button type="button" class="signin-eye-toggle" id="eyeToggle" aria-label="Toggle password visibility">
-                            <i data-lucide="eye" style="width:16px;height:16px;" aria-hidden="true"></i>
+                        <input id="passwordInput" class="signin-input" type="password"
+                               autocomplete="current-password" required>
+                        <button type="button" class="signin-eye-toggle" id="eyeToggle" aria-label="Show password">
+                            <i data-lucide="eye" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
 
-                <!-- A2: role select removed — role comes from server response -->
+                <p class="signin-error" id="signinError" role="alert" aria-live="polite"></p>
 
-                <!-- Error -->
-                <div class="signin-error" id="signinError" role="alert" aria-live="polite"></div>
-
-                <button type="submit" class="signin-submit" id="signinBtn">Sign in</button>
-                <!-- A3: dev bypass removed -->
+                <button type="submit" class="btn btn-primary signin-submit" id="signinBtn">Sign in</button>
             </form>
         </div>
-
-        <p class="signin-footer-note">ClassAI — NMIMS Internal Tool</p>
-    </div>
     </main>
 
     <script src="/static/signin.js"></script>

@@ -10,7 +10,6 @@ const messagesContainer = document.getElementById('messagesContainer');
 const mobileMenuToggle  = document.getElementById('mobileMenuToggle');
 const sidebar           = document.getElementById('sidebar');
 const mobileBackdrop    = document.getElementById('mobileBackdrop');
-const modelIdEl         = document.getElementById('modelId');
 const scopeSelector     = document.getElementById('scopeSelector');
 
 // ── Scope management (faculty/admin only) ─────────────────────────────────────
@@ -18,7 +17,14 @@ let currentScope = 'both'; // Default scope
 
 // Initialize scope selector based on role
 const role = sessionStorage.getItem('classai_role') || '';
-if (scopeSelector && (role === 'faculty' || role === 'admin')) {
+const isStaff = role === 'faculty' || role === 'admin';
+
+// Role-specific content: data-for="staff" or "student"; untagged items show for everyone
+document.querySelectorAll('[data-for]').forEach(el => {
+    el.hidden = el.dataset.for !== (isStaff ? 'staff' : 'student');
+});
+
+if (scopeSelector && isStaff) {
     // Show scope selector for faculty/admin
     scopeSelector.style.display = 'block';
     
@@ -32,7 +38,6 @@ if (scopeSelector && (role === 'faculty' || role === 'admin')) {
             pill.classList.add('scope-pill--active');
             // Update current scope
             currentScope = pill.getAttribute('data-scope');
-            console.log('Scope changed to:', currentScope);
         });
     });
 } else {
@@ -45,6 +50,15 @@ if (scopeSelector && (role === 'faculty' || role === 'admin')) {
 
 // ── Mobile sidebar ────────────────────────────────────────────────────────────
 if (mobileMenuToggle && sidebar && mobileBackdrop) {
+    const mobileQuery = window.matchMedia('(max-width: 768px)');
+    // The sidebar is only hidden from assistive tech while it is off-canvas
+    const syncSidebarA11y = () => {
+        if (mobileQuery.matches && !sidebar.classList.contains('open')) sidebar.setAttribute('aria-hidden', 'true');
+        else sidebar.removeAttribute('aria-hidden');
+    };
+    syncSidebarA11y();
+    mobileQuery.addEventListener('change', () => { closeSidebar(); syncSidebarA11y(); });
+
     function openSidebar() {
         sidebar.classList.add('open');
         sidebar.removeAttribute('aria-hidden');
@@ -56,16 +70,19 @@ if (mobileMenuToggle && sidebar && mobileBackdrop) {
     }
     function closeSidebar() {
         sidebar.classList.remove('open');
-        sidebar.setAttribute('aria-hidden', 'true');
         mobileBackdrop.classList.remove('active');
         mobileMenuToggle.setAttribute('aria-expanded', 'false');
+        syncSidebarA11y();
     }
     mobileMenuToggle.addEventListener('click', () => {
         sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
     });
     mobileBackdrop.addEventListener('click', closeSidebar);
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) closeSidebar();
+    document.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && sidebar.classList.contains('open')) {
+            closeSidebar();
+            mobileMenuToggle.focus();
+        }
     });
 }
 
@@ -104,7 +121,7 @@ if (roleLabel && role) {
 async function validateToken() {
     const token = sessionStorage.getItem('classai_token');
     if (!token) {
-        window.location.href = 'signin.html';
+        window.location.href = '/signin';
         return false;
     }
     
@@ -119,8 +136,8 @@ async function validateToken() {
         });
         
         if (res.status === 401) {
-            alert('Your session has expired. Please login again.');
-            window.location.href = 'signin.html';
+            alert('Your session has expired. Sign in again.');
+            window.location.href = '/signin';
             return false;
         }
         
@@ -145,11 +162,14 @@ userInput.addEventListener('input', function () {
     sendBtn.disabled = !this.value.trim() || !sessionReady;
 });
 
-// A30: clear error on type
-document.querySelectorAll('.signin-input').forEach(el => {
-    el.addEventListener('input', () => {
-        const err = document.getElementById('signinError');
-        if (err) err.textContent = '';
+// ── Example questions in the empty state ─────────────────────────────────────
+document.querySelectorAll('.suggestion').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (isSending) return;
+        userInput.value = btn.textContent.trim();
+        userInput.dispatchEvent(new Event('input'));
+        if (!sendBtn.disabled) sendBtn.click();
+        else userInput.focus();  // session still starting; the question is ready to send
     });
 });
 
@@ -220,30 +240,36 @@ function showThinking() {
     block.id = 'thinkingBlock';
     block.innerHTML = `
         <div class="message-wrapper">
-            <span class="message-label">CLASSAI</span>
+            <div class="message-label">ClassAI</div>
             <div class="message-content">
-                <div class="thinking-scan-container">
-                    <div class="thinking-scan-line"></div>
-                    <div class="thinking-doc-line">
-                        <span class="thinking-frag" style="width:52px"></span>
-                        <span class="thinking-frag" style="width:88px"></span>
-                        <span class="thinking-frag highlight h1" style="width:64px"></span>
-                        <span class="thinking-frag" style="width:40px"></span>
-                        <span class="thinking-frag" style="width:72px"></span>
-                        <span class="thinking-frag highlight h2" style="width:56px"></span>
-                    </div>
-                    <div class="thinking-doc-line">
-                        <span class="thinking-frag" style="width:44px"></span>
-                        <span class="thinking-frag highlight h3" style="width:80px"></span>
-                        <span class="thinking-frag" style="width:60px"></span>
-                        <span class="thinking-frag" style="width:48px"></span>
-                    </div>
+                <div class="thinking-status">
+                    <span class="thinking-pulse" aria-hidden="true"></span>
+                    <span class="thinking-text" id="thinkingText">${THINKING_STEPS.understanding}</span>
+                </div>
+                <div class="skeleton" aria-hidden="true">
+                    <span style="width:46%"></span>
+                    <span style="width:94%"></span>
+                    <span style="width:88%"></span>
+                    <span style="width:62%"></span>
                 </div>
             </div>
         </div>`;
     messages.appendChild(block);
     scrollToBottom();
     return block;
+}
+
+// Labels for the pipeline steps the server streams as "status" events
+const THINKING_STEPS = {
+    understanding: 'Reading your question',
+    cache_hit:     'Found a recent answer',
+    retrieval:     'Searching the documents',
+    generation:    'Writing the answer',
+};
+
+function setThinkingStep(step) {
+    const el = document.getElementById('thinkingText');
+    if (el && THINKING_STEPS[step]) el.textContent = THINKING_STEPS[step];
 }
 
 function removeThinking() {
@@ -343,6 +369,7 @@ async function sendQuery(query) {
             try { data = JSON.parse(line.substring(5).trim()); }
             catch { return; }
             if (data.answer !== undefined) finalResult = data;
+            else if (data.step) setThinkingStep(data.step);
         }
 
         if (!finalResult) throw new Error('No result received');
@@ -359,7 +386,7 @@ async function sendQuery(query) {
         if (structured && structured.confidence === "low") {
             const warningStrip = document.createElement('div');
             warningStrip.className = 'confidence-warning';
-            warningStrip.textContent = 'Low confidence — verify with source';
+            warningStrip.textContent = 'Low confidence. Check the source before relying on this.';
             contentDiv.appendChild(warningStrip);
         }
 
@@ -382,35 +409,32 @@ async function sendQuery(query) {
             const msg = (err.message || '').toLowerCase();
             if (msg.includes('401') || msg.includes('unauthorized')) {
                 // Token is invalid (likely server restart) - redirect to login
-                alert('Your session has expired. Please login again.');
-                window.location.href = 'signin.html';
+                alert('Your session has expired. Sign in again.');
+                window.location.href = '/signin';
                 return;
             }
-            
+
             const { contentDiv } = addMessage('', false);
-            // A21: structured error display
             const errorDiv = document.createElement('div');
-            errorDiv.className = 'response-section';
+            errorDiv.className = 'response-section response-error';
             const h = document.createElement('h3');
             h.className = 'section-heading';
-            h.style.color = '#ef4444';
             const p = document.createElement('p');
-            p.className = 'section-paragraph';
             if (msg.includes('429') || msg.includes('rate limit')) {
-                h.textContent = 'Rate Limit Reached';
-                p.textContent = 'Too many requests. Please wait a moment and try again.';
+                h.textContent = 'Too many questions in a minute';
+                p.textContent = 'Wait a few seconds, then retry.';
             } else if (msg.includes('timeout') || msg.includes('timed out')) {
-                h.textContent = 'Request Timeout';
-                p.textContent = 'The request took too long. Please try a simpler query.';
-            } else if (msg.includes('network') || msg.includes('fetch') || msg.includes('failed to fetch')) {
-                h.textContent = 'Connection Error';
-                p.textContent = 'Unable to reach the server. Check your connection.';
-            } else if (msg.includes('503') || msg.includes('not initialized')) {
-                h.textContent = 'Service Unavailable';
-                p.textContent = 'The system is starting up. Please try again in a moment.';
+                h.textContent = 'The answer took too long';
+                p.textContent = 'Retry, or ask a narrower question.';
+            } else if (msg.includes('network') || msg.includes('fetch')) {
+                h.textContent = 'Could not reach the server';
+                p.textContent = 'Check that the ClassAI server is running, then retry.';
+            } else if (msg.includes('503')) {
+                h.textContent = 'The server is not ready';
+                p.textContent = 'It may still be loading models. Retry in a moment.';
             } else {
-                h.textContent = 'Something Went Wrong';
-                p.textContent = 'An unexpected error occurred. Please try again.';
+                h.textContent = 'This question failed';
+                p.textContent = 'The server log has the details. Retry to send it again.';
             }
             errorDiv.appendChild(h);
             errorDiv.appendChild(p);
@@ -556,13 +580,3 @@ async function copyMessage(contentDiv, button, statusEl) {
     }, 2000);
 }
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-// Session initialization is now handled by validateToken() above
-
-// Welcome screen reveal animation
-requestAnimationFrame(() => {
-    document.querySelectorAll('.welcome .hero-reveal').forEach((el, i) => {
-        el.style.transitionDelay = (i * 80) + 'ms';
-        el.classList.add('reveal--in');
-    });
-});

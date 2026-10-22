@@ -1,7 +1,7 @@
 /**
  * Structured response renderer.
- * Uses document.createElement + textContent throughout — no innerHTML, no XSS.
- * A1: this file must be loaded before chat.js in chat.html.
+ * Uses document.createElement + textContent throughout (no innerHTML, no XSS).
+ * Loaded before chat.js in chat.html, and by index.html for the hero example.
  */
 
 class ResponseRenderer {
@@ -41,46 +41,36 @@ class ResponseRenderer {
     renderFooter(footerText, sources = []) {
         const p = document.createElement("p");
         p.className = "response-footer";
-        
-        // Parse footer text to identify source names and add collection tags
-        // Footer format: "Based on: Source1, Source2, Source3"
-        if (footerText.startsWith("Based on:")) {
-            const prefix = "Based on: ";
-            p.appendChild(document.createTextNode(prefix));
-            
-            const sourcesText = footerText.substring(prefix.length);
-            const sourceNames = sourcesText.split(",").map(s => s.trim());
-            
-            sourceNames.forEach((sourceName, index) => {
-                // Find matching source in sources array to get collection info
-                const sourceInfo = sources.find(s => 
-                    s.title === sourceName || 
-                    s.document_name === sourceName ||
-                    sourceName.includes(s.title) ||
-                    sourceName.includes(s.document_name)
+
+        // Footer format from the API: "Based on: Source1, Source2"
+        if (!footerText.startsWith("Based on:")) {
+            p.textContent = footerText;
+            return p;
+        }
+
+        const label = document.createElement("span");
+        label.className = "sources-label";
+        label.textContent = "Sources";
+        p.appendChild(label);
+
+        footerText.substring("Based on:".length).split(",").map(s => s.trim()).filter(Boolean)
+            .forEach(sourceName => {
+                const info = sources.find(s =>
+                    (s.title && (s.title === sourceName || sourceName.includes(s.title))) ||
+                    (s.document_name && (s.document_name === sourceName || sourceName.includes(s.document_name)))
                 );
-                
-                // Add source name
-                p.appendChild(document.createTextNode(sourceName));
-                
-                // Add collection tag if available
-                if (sourceInfo && sourceInfo.source_collection) {
+                const chip = document.createElement("span");
+                chip.className = "ref";
+                chip.textContent = sourceName;
+                p.appendChild(chip);
+
+                if (info && info.source_collection) {
                     const tag = document.createElement("span");
-                    tag.className = `source-collection-tag source-collection-tag--${sourceInfo.source_collection}`;
-                    tag.textContent = sourceInfo.source_collection;
+                    tag.className = `source-collection-tag source-collection-tag--${info.source_collection}`;
+                    tag.textContent = info.source_collection;
                     p.appendChild(tag);
                 }
-                
-                // Add comma separator if not last item
-                if (index < sourceNames.length - 1) {
-                    p.appendChild(document.createTextNode(", "));
-                }
             });
-        } else {
-            // Fallback: just render as text
-            p.textContent = footerText;
-        }
-        
         return p;
     }
 
@@ -164,9 +154,8 @@ class ResponseRenderer {
         
         if (!section.headers || !section.headers.length || !section.rows || !section.rows.length) {
             const p = document.createElement("p");
-            p.textContent = "(Empty table)";
-            p.style.color = "#6b7280";
-            p.style.fontStyle = "italic";
+            p.className = "table-empty";
+            p.textContent = "No rows to show.";
             div.appendChild(p);
             return div;
         }
@@ -219,7 +208,6 @@ class ResponseRenderer {
         const div = document.createElement("div");
         div.className = "response-section section-unknown";
         const pre = document.createElement("pre");
-        pre.style.cssText = "background:#1a1a1a;padding:1rem;border-radius:8px;overflow-x:auto;font-size:0.8rem;color:#9ca3af;";
         pre.textContent = JSON.stringify(section, null, 2);
         div.appendChild(pre);
         return div;
