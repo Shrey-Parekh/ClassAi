@@ -2,7 +2,7 @@
 Hybrid search combining dense vectors and BM25 sparse retrieval.
 """
 
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any
 from dataclasses import dataclass
 import logging
 import re
@@ -211,6 +211,21 @@ class HybridSearchEngine:
             self.logger.error(f"Dense search failed: {e}")
             return []
     
+    def _scroll_all(self, with_payload: bool) -> list:
+        """Return every point in the collection."""
+        points, offset = [], None
+        while True:
+            batch, offset = self.vector_db.client.scroll(
+                collection_name=self.collection_name,
+                limit=256,
+                offset=offset,
+                with_payload=with_payload,
+                with_vectors=False
+            )
+            points.extend(batch)
+            if offset is None:
+                return points
+
     def build_bm25_index(self, force_rebuild: bool = False):
         """
         Build BM25 index from all documents in collection with persistence.
@@ -219,32 +234,19 @@ class HybridSearchEngine:
             force_rebuild: Force rebuild even if cached index exists
         """
         try:
-            # Try loading from disk first
+            # Reuse the on-disk index only if it covers exactly the points
+            # currently in the collection (a re-index assigns new IDs).
             if not force_rebuild:
                 loaded = self.bm25_persistence.load()
                 if loaded:
-                    self.bm25_index, self.bm25_corpus, self.bm25_ids = loaded
-                    return
-            
+                    current_ids = {str(p.id) for p in self._scroll_all(with_payload=False)}
+                    if current_ids == {str(i) for i in loaded[2]}:
+                        self.bm25_index, self.bm25_corpus, self.bm25_ids = loaded
+                        return
+                    self.logger.info("BM25 index is stale (collection changed), rebuilding")
+
             self.logger.info("Building BM25 index from scratch...")
-            
-            # Scroll through all documents in collection
-            all_points = []
-            offset = None
-            
-            while True:
-                results, offset = self.vector_db.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=100,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False
-                )
-                
-                all_points.extend(results)
-                
-                if offset is None:
-                    break
+            all_points = self._scroll_all(with_payload=True)
             
             # Extract corpus and IDs
             self.bm25_corpus = []

@@ -233,8 +233,7 @@ class AnswerGenerator:
         
         # Log format detection
         self.logger.info(
-            "format=%s verbosity=%s structure=%s trigger_v=%r trigger_s=%r",
-            format_preference.structure,
+            "verbosity=%s structure=%s trigger_v=%r trigger_s=%r",
             format_preference.verbosity,
             format_preference.structure,
             format_preference.verbosity_trigger,

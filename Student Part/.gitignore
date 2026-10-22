@@ -1,53 +1,17 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
 venv/
-env/
-ENV/
-*.egg-info/
-dist/
-build/
+.venv/
 
-# Qdrant
+# Local data
+.env
+*.pdf
+data/index/
 qdrant_db/
 
-# Data
-data/index/
-*.pdf
-
-# Keep sample markdown files but ignore user-added ones
-# (You can customize this based on your needs)
-
-# Old directories
-/Syllabus/
-/Question Papers/
-/Question Papers ALL/
-
-# IDE
+# Editors / OS
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Env
-.env
-
-# Logs
-*.log
-
-# Jupyter
-.ipynb_checkpoints/
-*.ipynb
-
-# Streamlit
-.streamlit/
-
-# Test outputs
-test_output/

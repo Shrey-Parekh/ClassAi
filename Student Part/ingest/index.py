@@ -9,6 +9,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams
 from langchain_ollama import OllamaEmbeddings
@@ -166,8 +167,7 @@ def index_documents(
     except Exception as e:
         print(f"\n❌ Failed to initialize Qdrant!")
         print(f"   Error: {e}")
-        print("\n   Make sure Qdrant is running:")
-        print("   docker-compose up -d")
+        print("\n   Make sure Qdrant is running (docker compose up -d in Faculty Part)")
         return False
     
     # Step 6: Index
@@ -216,13 +216,16 @@ def index_documents(
 
 if __name__ == "__main__":
     import argparse
-    
+
+    load_dotenv(Path(__file__).parent.parent / ".env")
+
     parser = argparse.ArgumentParser(description="Index NMIMS academic documents")
     parser.add_argument("--syllabus-dir", default="data/syllabus", help="Syllabus directory")
     parser.add_argument("--qp-dir", default="data/question_papers", help="Question papers directory")
     parser.add_argument("--qdrant-url", default=None, help="Qdrant URL (default: from .env or http://localhost:6333)")
     parser.add_argument("--collection", default="academic_rag", help="Collection name")
-    parser.add_argument("--append", action="store_true", help="Append to existing (don't recreate)")
+    parser.add_argument("--append", action="store_true",
+                        help="Add to the existing collection instead of recreating it (no de-duplication)")
     
     args = parser.parse_args()
     

@@ -4,22 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#0a0a0a">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com 'unsafe-inline'; font-src https://cdn.fontshare.com; img-src 'self' data:; connect-src 'self' http://localhost:8001 https://unpkg.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com 'unsafe-inline'; style-src 'self' https://api.fontshare.com https://fonts.googleapis.com 'unsafe-inline'; font-src https://cdn.fontshare.com https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self';">
     <title>Chat · ClassAI</title>
-    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400,500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/chat.css">
-    <link rel="stylesheet" href="/static/ambient.css">
     <script src="https://unpkg.com/lucide@0.344.0/dist/umd/lucide.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
-    <div class="ambient-root" aria-hidden="true">
-        <div class="ambient-glow"></div>
-        <div class="ambient-grain"></div>
-    </div>
     <script>
         // Simple token presence check
         (function() {

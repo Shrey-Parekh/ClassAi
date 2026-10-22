@@ -2,7 +2,7 @@
 BGE Reranker for cross-encoder based relevance scoring.
 """
 
-from typing import List, Dict, Any
+from typing import List, Any
 import logging
 
 

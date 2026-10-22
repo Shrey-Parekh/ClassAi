@@ -3,7 +3,6 @@ Complete retrieval pipeline orchestrating all components.
 """
 
 from typing import Dict, Any, List
-from config.chunking_config import TOP_K_RERANKED
 import logging
 import re
 

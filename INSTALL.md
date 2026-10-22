@@ -121,7 +121,7 @@ cp "Student Part/.env.example" "Student Part/.env"
 **Index Faculty Documents:**
 ```bash
 cd "Faculty Part"
-python scripts/ingest_new.py
+python scripts/ingest_new.py --input data/raw --metadata data/metadata.json
 ```
 
 **Index Student Documents:**
@@ -134,7 +134,7 @@ python ingest/index.py
 
 ```bash
 cd "Faculty Part"
-python -m uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+python -m uvicorn src.api.main:app --reload --port 8000
 ```
 
 ### 9. Verify Installation
@@ -333,4 +333,4 @@ After successful installation:
 
 **Installation Complete!** 🎉
 
-You're ready to use ClassAI. Start by logging in at http://localhost:8001/signin
+You're ready to use ClassAI. Start by logging in at http://localhost:8000/signin

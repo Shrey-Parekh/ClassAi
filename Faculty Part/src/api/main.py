@@ -2,9 +2,11 @@
 FastAPI application for Faculty Part RAG system.
 """
 
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, AsyncIterator
 from pathlib import Path
@@ -12,13 +14,13 @@ from dotenv import load_dotenv
 import json
 import asyncio
 import os
+import re
+import secrets
+import traceback
 import bcrypt
 
 # Load environment variables
 load_dotenv()
-
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from ..retrieval.scope_router import ScopeRouter
 from ..generation.answer_generator import AnswerGenerator
@@ -55,10 +57,17 @@ def load_demo_users() -> Dict[str, Dict[str, str]]:
 DEMO_USERS = load_demo_users()
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await startup_event()
+    yield
+
+
 app = FastAPI(
     title="ClassAI Faculty Part",
     description="AI-powered faculty resource assistant with semantic RAG",
-    version="0.1.0"
+    version="0.1.0",
+    lifespan=lifespan
 )
 
 # CORS middleware - configure for production
@@ -114,7 +123,6 @@ llm_semaphore = None  # Limit concurrent LLM calls
 active_tokens = {}  # Store active session tokens with role info
 
 
-@app.on_event("startup")
 async def startup_event():
     """Initialize RAG components on startup."""
     global scope_router, answer_generator, cache_manager, conversation_manager, rate_limiter, llm_semaphore
@@ -199,7 +207,6 @@ async def startup_event():
     except Exception as e:
         print(f"✗ Failed to initialize: {e}")
         print("Make sure Qdrant is running and .env is configured")
-        import traceback
         traceback.print_exc()
 
 
@@ -251,7 +258,6 @@ async def signin(request: SignInRequest):
     # returns the role stored with the user record.
     
     # Generate token (in production, use JWT with expiry)
-    import secrets
     token = secrets.token_urlsafe(32)
     
     # Store token with role info for later validation
@@ -271,6 +277,15 @@ async def signin(request: SignInRequest):
     )
 
 
+@app.post("/api/auth/signout")
+async def signout(req: Request):
+    """Revoke the caller's token."""
+    auth_header = req.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        active_tokens.pop(auth_header[len("Bearer "):].strip(), None)
+    return {"status": "signed_out"}
+
+
 @app.post("/query", response_model=QueryResponse)
 async def query_faculty_resources(request: QueryRequest, req: Request):
     """
@@ -288,14 +303,7 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     # ── Extract role from Authorization header ──────────────────────
     auth_header = req.headers.get("Authorization", "")
     token = auth_header.replace("Bearer ", "").strip() if auth_header.startswith("Bearer ") else None
-    
-    # Debug: Log token info
-    print(f"[AUTH] Authorization header present: {bool(auth_header)}")
-    print(f"[AUTH] Token extracted: {token[:20] if token else 'None'}...")
-    print(f"[AUTH] Token in active_tokens: {token in active_tokens if token else False}")
-    if token and token in active_tokens:
-        print(f"[AUTH] Token data: {active_tokens[token]}")
-    
+
     # Get role from server-side token storage (A2: never trust client)
     if token and token in active_tokens:
         role = active_tokens[token]["role"]
@@ -305,7 +313,6 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
         print(f"[AUTH] No valid token, defaulting to role=student")
     
     # ── Sanitize and log query ──────────────────────────────────────
-    import re
     raw_query = request.query or ""
     query = re.sub(r'\s+', ' ', raw_query).strip()
     
@@ -547,7 +554,6 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
         print("=" * 80)
         print("CRITICAL ERROR IN QUERY ENDPOINT")
         print("=" * 80)
@@ -699,7 +705,6 @@ async def stream_query_response(request: QueryRequest, role: str, scope: str) ->
         print(f"[SSE] Stream complete")
         
     except Exception as e:
-        import traceback
         print("=" * 80)
         print("[SSE ERROR] Exception in stream handler")
         print("=" * 80)
@@ -709,7 +714,7 @@ async def stream_query_response(request: QueryRequest, role: str, scope: str) ->
         print(traceback.format_exc())
         print("=" * 80)
         
-        yield f"event: error\ndata: {json.dumps({'message': str(e)})}\n\n"
+        yield f"event: error\ndata: {json.dumps({'message': 'Something went wrong while answering. Check the server log.'})}\n\n"
         yield "event: done\ndata: {}\n\n"
 
 
@@ -754,9 +759,6 @@ async def list_conversations():
 
 
 # Serve frontend
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
 frontend_path = Path(__file__).parent.parent.parent / "frontend"
 
 @app.get("/app")
@@ -782,4 +784,4 @@ app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -3,7 +3,7 @@ Chunking configuration based on semantic completeness principles.
 """
 
 from enum import Enum
-from typing import Dict, Any
+from typing import Dict
 
 
 class ChunkLevel(Enum):

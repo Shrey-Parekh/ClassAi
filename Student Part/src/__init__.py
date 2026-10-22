@@ -1,1 +1,0 @@
-"""Academic RAG assistant package."""

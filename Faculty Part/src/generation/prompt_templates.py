@@ -5,7 +5,6 @@ Prompts are structured with context first, then JSON schema.
 This ensures the model sees the information before formatting instructions.
 """
 
-from typing import Dict
 
 
 # Shared rules for all prompts

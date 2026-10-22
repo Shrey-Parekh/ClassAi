@@ -4,7 +4,6 @@ LLM client wrapper supporting Ollama and Google Gemini.
 
 import os
 import requests
-from typing import Optional
 
 
 class LLMClient:

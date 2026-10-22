@@ -4,7 +4,6 @@ Complete chunking strategy for all document types using BAAI/bge-m3.
 Replaces the old 512 token multi-layer strategy with document-type-specific chunking.
 """
 
-import os
 import re
 import hashlib
 from typing import List, Dict, Any, Tuple, Optional

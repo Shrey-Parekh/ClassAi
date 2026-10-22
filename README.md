@@ -130,7 +130,7 @@ python ingest/index.py            # add --append to keep the existing collection
 
 ```bash
 cd "Faculty Part"
-python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+python -m uvicorn src.api.main:app --port 8000
 ```
 
 Open <http://localhost:8000/signin>. Interactive API docs are at `/docs`.

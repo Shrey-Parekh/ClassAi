@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional, List, Tuple
 from rank_bm25 import BM25Okapi
 import hashlib
-import json
 
 
 class BM25PersistenceManager:

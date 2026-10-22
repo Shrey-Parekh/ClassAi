@@ -22,13 +22,19 @@ def reset_db(qdrant_url: str = None, collection_name: str = "academic_rag"):
             print(f"⚠️  Collection '{collection_name}' does not exist")
     except Exception as e:
         print(f"❌ API deletion failed: {e}")
-        print("\nMake sure Qdrant is running:")
-        print("  docker-compose up -d")
+        print("\nMake sure Qdrant is running (docker compose up -d in Faculty Part)")
+        return False
 
     print("✅ Database reset complete. Run ingestion to rebuild.")
+    return True
 
 if __name__ == "__main__":
     import argparse
+    import sys
+    from pathlib import Path
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).parent.parent / ".env")
 
     parser = argparse.ArgumentParser(description="Reset Qdrant collection")
     parser.add_argument("--qdrant-url", default=None, help="Qdrant URL (default: from .env or http://localhost:6333)")
@@ -36,4 +42,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    reset_db(qdrant_url=args.qdrant_url, collection_name=args.collection)
+    sys.exit(0 if reset_db(qdrant_url=args.qdrant_url, collection_name=args.collection) else 1)

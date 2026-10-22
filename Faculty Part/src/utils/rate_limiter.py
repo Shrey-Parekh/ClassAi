@@ -14,7 +14,7 @@ class RateLimiter:
     """
     Sliding window rate limiter.
     
-    Tracks requests per IP with automatic cleanup of old entries.
+    Tracks requests per IP; timestamps older than the window are dropped.
     """
     
     def __init__(self, max_requests: int = 20, window_seconds: int = 60):
@@ -29,6 +29,8 @@ class RateLimiter:
         self.window_seconds = window_seconds
         
         # Store timestamps per IP: {ip: deque([timestamp1, timestamp2, ...])}
+        # ponytail: one entry per IP is never evicted; fine for local use,
+        # evict idle IPs here if this is ever exposed publicly.
         self.requests: Dict[str, deque] = defaultdict(lambda: deque())
         
         # Lock for thread safety
@@ -65,17 +67,3 @@ class RateLimiter:
             retry_after = int(oldest_request + self.window_seconds - now) + 1
             
             return False, retry_after
-    
-    async def cleanup_old_entries(self):
-        """Remove IPs with no recent requests (cleanup task)."""
-        async with self.lock:
-            now = time.time()
-            cutoff = now - self.window_seconds * 2  # Keep 2x window for safety
-            
-            ips_to_remove = []
-            for ip, request_times in self.requests.items():
-                if not request_times or request_times[-1] < cutoff:
-                    ips_to_remove.append(ip)
-            
-            for ip in ips_to_remove:
-                del self.requests[ip]

@@ -7,7 +7,7 @@ Run after collecting usage data to identify if limits are too loose/tight.
 import json
 import sys
 from pathlib import Path
-from typing import List, Dict
+from typing import Dict
 import statistics
 
 

@@ -2,7 +2,7 @@
 Retrieval and answer quality metrics.
 """
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import re
 
 
