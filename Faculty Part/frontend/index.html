@@ -8,133 +8,78 @@
     <title>ClassAI · Answers from NMIMS documents</title>
     <meta name="description" content="Ask about NMIMS policies, forms and syllabi in plain language. Every answer names the document it came from.">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800&f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+    <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/base.css">
     <link rel="stylesheet" href="/static/style.css">
-    <script>document.documentElement.classList.add('js');</script>
 </head>
 <body>
     <header class="nav">
-        <div class="nav-inner">
-            <a href="/" class="brand" aria-label="ClassAI home">
-                <span class="brand-mark" aria-hidden="true">C</span>
-                <span class="brand-name">ClassAI</span>
-            </a>
-            <a href="/chat" class="btn btn-quiet nav-cta">Open assistant</a>
-        </div>
+        <a href="/" class="brand">ClassAI</a>
+        <a href="/chat" class="nav-link">Open assistant</a>
     </header>
 
     <main>
         <section class="hero">
             <div class="hero-copy">
-                <h1 class="hero-title">Answers from <mark class="hl">NMIMS documents</mark>.</h1>
+                <h1 class="hero-title">Answers from NMIMS documents.</h1>
                 <p class="hero-sub">Ask in your own words. Each answer lists the handbook, form or syllabus it came from.</p>
-                <div class="hero-actions">
-                    <a href="/chat" class="btn btn-primary">Open assistant</a>
-                </div>
+                <a href="/chat" class="btn btn-primary">Open assistant</a>
             </div>
 
-            <figure class="specimen" aria-label="Example question and answer">
-                <p class="specimen-q">How many days of casual leave do I get?</p>
-                <div class="specimen-a" id="specimenAnswer"></div>
+            <figure class="example" aria-label="Example question and answer">
+                <p class="example-q">How many days of casual leave do I get?</p>
+                <div id="exampleAnswer"></div>
             </figure>
         </section>
 
-        <section class="corpus" aria-labelledby="corpusTitle">
-            <h2 class="section-title reveal" id="corpusTitle">Indexed documents</h2>
-            <div class="corpus-grid">
-                <article class="tile tile--faculty reveal">
-                    <h3 class="tile-title">Faculty documents</h3>
-                    <ul class="doc-list">
-                        <li>
-                            <span class="doc-name">Employee Resource Book 2024-25</span>
-                            <span class="doc-desc">Service rules, leave, benefits and conduct.</span>
-                        </li>
-                        <li>
-                            <span class="doc-name">Faculty Academic Guidelines</span>
-                            <span class="doc-desc">Teaching load, evaluation and academic process.</span>
-                        </li>
-                        <li>
-                            <span class="doc-name">Faculty Applications Compendium</span>
-                            <span class="doc-desc">HR forms, with their fields and approval steps.</span>
-                        </li>
-                    </ul>
-                    <div class="code-row" aria-label="Form codes in the compendium">
-                        <span class="ref">HR-LA-01</span>
-                        <span class="ref">HR-CO-01</span>
-                        <span class="ref">HR-TE-02</span>
-                        <span class="ref">HR-CR-01</span>
-                        <span class="ref">HR-SG-01</span>
-                        <span class="ref">HR-PB-01</span>
-                    </div>
-                </article>
-
-                <article class="tile tile--students reveal">
-                    <h3 class="tile-title">Course material</h3>
-                    <ul class="doc-list">
-                        <li>
-                            <span class="doc-name">SVKM NMIMS syllabus</span>
-                            <span class="doc-desc">Units, course outcomes and credits for each course.</span>
-                        </li>
-                        <li>
-                            <span class="doc-name">Question papers</span>
-                            <span class="doc-desc">Machine Learning and Cyber Security, split by question with marks.</span>
-                        </li>
-                    </ul>
-                    <p class="tile-example">Try: <q>Which questions map to CO-2 in Machine Learning?</q></p>
-                </article>
+        <section class="block" aria-labelledby="corpusTitle">
+            <h2 class="block-title" id="corpusTitle">Indexed documents</h2>
+            <div class="corpus">
+                <div>
+                    <h3 class="group-title">Faculty</h3>
+                    <dl class="doc-list">
+                        <div><dt>Employee Resource Book 2024-25</dt><dd>Service rules, leave, benefits and conduct.</dd></div>
+                        <div><dt>Faculty Academic Guidelines</dt><dd>Teaching load, evaluation and academic process.</dd></div>
+                        <div><dt>Faculty Applications Compendium</dt><dd>HR forms, with their fields and approval steps.</dd></div>
+                    </dl>
+                    <p class="forms-line">Forms: <span class="ref">HR-LA-01, HR-CO-01, HR-TE-02, HR-CR-01, HR-SG-01, HR-PB-01</span></p>
+                </div>
+                <div>
+                    <h3 class="group-title">Students</h3>
+                    <dl class="doc-list">
+                        <div><dt>SVKM NMIMS syllabus</dt><dd>Units, course outcomes and credits for each course.</dd></div>
+                        <div><dt>Question papers</dt><dd>Machine Learning and Cyber Security, split by question with marks.</dd></div>
+                    </dl>
+                </div>
             </div>
         </section>
 
-        <section class="roles" aria-labelledby="rolesTitle">
-            <h2 class="section-title reveal" id="rolesTitle">Access by role</h2>
-            <dl class="role-list reveal">
-                <div class="role-row">
-                    <dt>Student</dt>
-                    <dd>Syllabi and question papers.</dd>
-                </div>
-                <div class="role-row">
-                    <dt>Faculty</dt>
-                    <dd>
-                        Faculty documents, course material, or both, chosen per question.
-                        <span class="seg-demo" aria-hidden="true">
-                            <span>Student</span><span>Faculty</span><span class="is-on">Both</span>
-                        </span>
-                    </dd>
-                </div>
-                <div class="role-row">
-                    <dt>Admin</dt>
-                    <dd>All documents, with the same options as faculty.</dd>
-                </div>
+        <section class="block" aria-labelledby="rolesTitle">
+            <h2 class="block-title" id="rolesTitle">Access by role</h2>
+            <dl class="role-list">
+                <div><dt>Student</dt><dd>Syllabi and question papers.</dd></div>
+                <div><dt>Faculty</dt><dd>Faculty documents, course material, or both, chosen per question.</dd></div>
+                <div><dt>Admin</dt><dd>All documents, with the same options as faculty.</dd></div>
             </dl>
         </section>
     </main>
 
     <footer class="footer">
-        <div class="footer-inner">
-            <a href="/" class="brand" aria-label="ClassAI home">
-                <span class="brand-mark" aria-hidden="true">C</span>
-                <span class="brand-name">ClassAI</span>
-            </a>
-            <p class="footer-note">Answers can be wrong. Check the cited document before you rely on one.</p>
-            <span class="footer-year" id="footerYear"></span>
-        </div>
+        <span class="brand">ClassAI</span>
+        <p class="footer-note">Answers can be wrong. Check the cited document before you rely on one.</p>
     </footer>
 
     <script src="/static/renderer.js"></script>
     <script>
-        document.getElementById('footerYear').textContent = new Date().getFullYear();
-
-        // Hero example, rendered by the same renderer the chat uses.
+        // Example answer, rendered by the same renderer the chat uses.
         // Figures are from form HR-LA-01 in the Faculty Applications Compendium.
-        document.getElementById('specimenAnswer').appendChild(renderer.render({
+        document.getElementById('exampleAnswer').appendChild(renderer.render({
             title: '12 days of casual leave a year',
             sections: [
                 {
                     type: 'table',
-                    heading: 'Annual entitlement',
-                    headers: ['Leave type', 'Days'],
+                    headers: ['Leave type', 'Days per year'],
                     rows: [
                         ['Casual Leave (CL)', '12'],
                         ['Earned Leave (EL)', '30'],
@@ -149,14 +94,6 @@
             footer: 'Based on: Faculty Applications Compendium',
             confidence: 'high'
         }, [{ title: 'Faculty Applications Compendium', source_collection: 'faculty' }]));
-
-        // Reveal sections once as they enter the viewport
-        const io = new IntersectionObserver(entries => {
-            entries.forEach(e => {
-                if (e.isIntersecting) { e.target.classList.add('is-in'); io.unobserve(e.target); }
-            });
-        }, { rootMargin: '0px 0px -10% 0px' });
-        document.querySelectorAll('.reveal').forEach(el => io.observe(el));
     </script>
 </body>
 </html>

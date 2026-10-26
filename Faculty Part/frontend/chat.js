@@ -242,16 +242,7 @@ function showThinking() {
         <div class="message-wrapper">
             <div class="message-label">ClassAI</div>
             <div class="message-content">
-                <div class="thinking-status">
-                    <span class="thinking-pulse" aria-hidden="true"></span>
-                    <span class="thinking-text" id="thinkingText">${THINKING_STEPS.understanding}</span>
-                </div>
-                <div class="skeleton" aria-hidden="true">
-                    <span style="width:46%"></span>
-                    <span style="width:94%"></span>
-                    <span style="width:88%"></span>
-                    <span style="width:62%"></span>
-                </div>
+                <p class="thinking-text" id="thinkingText">${THINKING_STEPS.understanding}…</p>
             </div>
         </div>`;
     messages.appendChild(block);
@@ -269,7 +260,7 @@ const THINKING_STEPS = {
 
 function setThinkingStep(step) {
     const el = document.getElementById('thinkingText');
-    if (el && THINKING_STEPS[step]) el.textContent = THINKING_STEPS[step];
+    if (el && THINKING_STEPS[step]) el.textContent = THINKING_STEPS[step] + '…';
 }
 
 function removeThinking() {
