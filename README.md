@@ -5,9 +5,9 @@ institutional policies and guidelines, and students can ask about syllabi and
 past question papers. Every answer is grounded in the source documents and
 cites them.
 
-It runs fully on a local machine. Qdrant stores the vectors, Ollama serves the
-language model, and a FastAPI backend handles retrieval, generation, sign-in
-and the web UI.
+Retrieval runs locally: Qdrant stores the vectors and a FastAPI backend handles
+search, sign-in and the web UI. Answers are written by a language model on
+[Groq](https://console.groq.com/).
 
 ## How it works
 
@@ -20,8 +20,8 @@ and the web UI.
 3. **Retrieval.** Dense vector search and BM25 run in parallel. Results are
    merged with reciprocal rank fusion and then reranked with
    `BAAI/bge-reranker-v2-m3`.
-4. **Generation.** The top chunks go to the LLM (`gemma3:12b` via Ollama by
-   default). The LLM returns a structured answer with sources, streamed to the
+4. **Generation.** The top chunks go to the LLM (`llama-3.3-70b-versatile` on
+   Groq by default). The LLM returns a structured answer with sources, streamed to the
    browser over Server-Sent Events.
 
 ### Roles
@@ -70,7 +70,8 @@ ClassAI/
 
 - Python 3.10 or newer
 - Docker, for Qdrant
-- [Ollama](https://ollama.com)
+- A Groq API key from <https://console.groq.com/keys>
+- [Ollama](https://ollama.com), only for re-indexing the student documents
 - About 16 GB of RAM. A CUDA GPU is optional but makes embedding much faster.
 
 ### 1. Install dependencies
@@ -83,14 +84,11 @@ source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Start Qdrant and pull the models
+### 2. Start Qdrant
 
 ```bash
 cd "Faculty Part"
 docker compose up -d
-
-ollama pull gemma3:12b
-ollama pull bge-m3
 ```
 
 ### 3. Configure
@@ -100,8 +98,8 @@ cp "Faculty Part/.env.example" "Faculty Part/.env"
 cp "Student Part/.env.example" "Student Part/.env"
 ```
 
-The defaults point at a local Qdrant and Ollama. The one thing you must set is
-the sign-in accounts in `Faculty Part/.env`. Each account uses the format
+Put your Groq key in `Faculty Part/.env` as `GROQ_API_KEY=...`. The file is
+git-ignored. You also need sign-in accounts in the same file. Each account uses the format
 `email:bcrypt_hash:role:name`. To generate a hash:
 
 ```bash
@@ -162,8 +160,9 @@ Runtime settings live in `Faculty Part/.env`:
 
 | Variable                  | Default                  | Notes                         |
 |---------------------------|--------------------------|-------------------------------|
-| `LLM_PROVIDER`            | `ollama`                 | `ollama` or `gemini`          |
-| `LLM_MODEL`               | `gemma3:12b`             |                               |
+| `LLM_PROVIDER`            | `groq`                   | `groq`, `ollama` or `gemini`  |
+| `LLM_MODEL`               | `llama-3.3-70b-versatile`| Any model listed on Groq      |
+| `GROQ_API_KEY`            |                          | Required for Groq             |
 | `OLLAMA_BASE_URL`         | `http://localhost:11434` |                               |
 | `GEMINI_API_KEY`          |                          | Only when using Gemini        |
 | `QDRANT_URL`              | `http://localhost:6333`  |                               |

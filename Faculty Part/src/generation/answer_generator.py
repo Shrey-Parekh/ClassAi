@@ -22,6 +22,10 @@ def _context_budget_for_provider() -> Dict[str, int]:
     sized for the backend actually in use.
     """
     provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    if provider == "groq":
+        # Groq's free tier allows roughly 6-12K tokens per minute per model,
+        # so keep each request well under that.
+        return {"context": 4500, "output": 1024, "prompt": 500}
     if provider == "gemini":
         return {"context": 32768, "output": 2048, "prompt": 500}
     # Ollama / default: match num_ctx=8192 in utils/llm.py

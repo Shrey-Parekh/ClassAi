@@ -22,6 +22,14 @@ import bcrypt
 # Load environment variables
 load_dotenv()
 
+# Verify HTTPS against the Windows certificate store, so calls to Groq and
+# Hugging Face work behind antivirus or proxy TLS inspection.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 from ..retrieval.scope_router import ScopeRouter
 from ..generation.answer_generator import AnswerGenerator
 from ..utils.vector_db import VectorDBClient

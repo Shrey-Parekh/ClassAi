@@ -57,6 +57,7 @@ bcrypt==4.1.2
 
 # ── Utilities ───────────────────────────────────────────────────────────────
 requests==2.31.0
+truststore>=0.10        # trust the Windows certificate store for HTTPS (Groq)
 numpy==1.26.3
 tiktoken>=0.6.0
 

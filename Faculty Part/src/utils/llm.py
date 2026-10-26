@@ -1,9 +1,12 @@
 """
-LLM client wrapper supporting Ollama and Google Gemini.
+LLM client wrapper supporting Groq, Ollama and Google Gemini.
 """
 
 import os
+import time
 import requests
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 
 
 class LLMClient:
@@ -29,7 +32,16 @@ class LLMClient:
         self.model = model or os.getenv("LLM_MODEL", "gemma3:12b")
         self.temperature = temperature
         
-        if self.provider == "gemini":
+        if self.provider == "groq":
+            self.model = model or os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+            self.api_key = (os.getenv("GROQ_API_KEY") or "").strip()
+            if not self.api_key:
+                raise ValueError("GROQ_API_KEY is not set. Add it to Faculty Part/.env")
+            self.base_url = GROQ_BASE_URL
+            self.ping()
+            print(f"✓ Connected to Groq")
+            print(f"✓ Using model: {self.model}")
+        elif self.provider == "gemini":
             self.api_key = os.getenv("GEMINI_API_KEY")
             if not self.api_key:
                 raise ValueError("GEMINI_API_KEY not set in environment")
@@ -43,8 +55,23 @@ class LLMClient:
             print(f"✓ Using model: {self.model}")
 
     def ping(self) -> None:
-        """Raise ConnectionError if Ollama is down or the model is not pulled (no-op for Gemini)."""
+        """Raise ConnectionError if the LLM backend is unreachable or the model is unavailable."""
         if self.provider == "gemini":
+            return
+        if self.provider == "groq":
+            try:
+                response = requests.get(f"{self.base_url}/models", timeout=10,
+                                        headers={"Authorization": f"Bearer {self.api_key}"})
+            except requests.exceptions.RequestException as e:
+                raise ConnectionError(f"Cannot reach Groq at {self.base_url}. Error: {e}")
+            if response.status_code == 401:
+                raise ConnectionError("Groq rejected the API key. Check GROQ_API_KEY in Faculty Part/.env")
+            response.raise_for_status()
+            available = sorted(m.get("id") for m in response.json().get("data", []))
+            if self.model not in available:
+                raise ConnectionError(
+                    f"Groq model '{self.model}' is not available. Set LLM_MODEL to one of: {', '.join(available)}"
+                )
             return
         try:
             response = requests.get(f"{self.base_url}/api/tags", timeout=5)
@@ -81,10 +108,57 @@ class LLMClient:
         Returns:
             Generated text
         """
+        if self.provider == "groq":
+            return self._generate_groq(prompt, max_tokens, temperature, format, max_retries)
         if self.provider == "gemini":
             return self._generate_gemini(prompt, max_tokens, temperature, format, max_retries)
-        else:
-            return self._generate_ollama(prompt, max_tokens, temperature, format, max_retries)
+        return self._generate_ollama(prompt, max_tokens, temperature, format, max_retries)
+
+    def _generate_groq(
+        self,
+        prompt: str,
+        max_tokens: int,
+        temperature: float,
+        format: str,
+        max_retries: int
+    ) -> str:
+        """Generate text with Groq's OpenAI-compatible chat completions API."""
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature if temperature is not None else self.temperature,
+            "max_completion_tokens": max_tokens,
+        }
+        if format == "json":
+            payload["response_format"] = {"type": "json_object"}
+
+        for attempt in range(max_retries + 1):
+            try:
+                response = requests.post(
+                    f"{self.base_url}/chat/completions", json=payload, timeout=120,
+                    headers={"Authorization": f"Bearer {self.api_key}"}
+                )
+                if response.status_code == 429 and attempt < max_retries:
+                    # Free-tier token/request limits: wait as long as Groq asks
+                    wait = float(response.headers.get("retry-after") or 2 ** attempt * 5)
+                    print(f"[LLM] Groq rate limit, waiting {wait:.0f}s")
+                    time.sleep(min(wait, 60))
+                    continue
+                if response.status_code == 400 and format == "json" and "json_validate_failed" in response.text:
+                    # The model produced invalid JSON; Groq returns what it generated
+                    failed = response.json().get("error", {}).get("failed_generation")
+                    if failed:
+                        return failed.strip()
+                response.raise_for_status()
+                return (response.json()["choices"][0]["message"].get("content") or "").strip() or "{}"
+            except requests.exceptions.RequestException as e:
+                if attempt < max_retries:
+                    print(f"[LLM] Groq request failed on attempt {attempt + 1}/{max_retries + 1}: {e}, retrying...")
+                    time.sleep(2)
+                else:
+                    detail = getattr(getattr(e, "response", None), "text", "")[:300]
+                    raise RuntimeError(f"Groq generation failed: {e} {detail}")
+        raise RuntimeError("Groq rate limit still exceeded after retries. Wait a minute and try again.")
     
     def _generate_gemini(
         self,
