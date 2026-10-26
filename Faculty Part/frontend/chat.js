@@ -126,13 +126,9 @@ async function validateToken() {
     }
     
     try {
-        // Make a lightweight request to check if token is valid
-        const res = await fetch(`${API_URL}/conversation/new`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            }
+        // Tokens live in server memory, so a server restart invalidates them
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (res.status === 401) {

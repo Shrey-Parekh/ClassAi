@@ -260,6 +260,17 @@ async def signin(request: SignInRequest):
     )
 
 
+@app.get("/api/auth/me")
+async def whoami(req: Request):
+    """Return the caller's role, or 401 if the token is unknown (e.g. after a server restart)."""
+    auth_header = req.headers.get("Authorization", "")
+    token = auth_header[len("Bearer "):].strip() if auth_header.startswith("Bearer ") else None
+    if token not in active_tokens:
+        raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
+    user = active_tokens[token]
+    return {"role": user["role"], "name": user["name"], "email": user["email"]}
+
+
 @app.post("/api/auth/signout")
 async def signout(req: Request):
     """Revoke the caller's token."""
@@ -447,7 +458,11 @@ async def query_faculty_resources(request: QueryRequest, req: Request):
     """
     auth_header = req.headers.get("Authorization", "")
     token = auth_header[len("Bearer "):].strip() if auth_header.startswith("Bearer ") else None
-    role = active_tokens[token]["role"] if token in active_tokens else "student"
+    if token and token not in active_tokens:
+        # A stale token (tokens live in memory, so any restart drops them) must
+        # not silently fall back to student access.
+        raise HTTPException(status_code=401, detail="Session expired. Sign in again.")
+    role = active_tokens[token]["role"] if token else "student"
 
     query = re.sub(r'\s+', ' ', request.query or "").strip()
     scope = request.scope or "both"
