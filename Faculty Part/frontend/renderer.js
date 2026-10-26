@@ -116,13 +116,23 @@ class ResponseRenderer {
             h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
-        const p = document.createElement("p");
-        const text = section.content || "";
-        text.split("\n").forEach((line, i, arr) => {
-            this.inline(p, line);
-            if (i < arr.length - 1) p.appendChild(document.createElement("br"));
+        // The model sometimes writes "- item" lines inside a paragraph; show
+        // those as a real list and keep the remaining lines as text.
+        const bullet = /^\s*(?:[-•*]|\d+[.)])\s+/;
+        let p = null, ul = null;
+        (section.content || "").split("\n").forEach(line => {
+            if (!line.trim()) { p = null; ul = null; return; }
+            if (bullet.test(line)) {
+                if (!ul) { ul = document.createElement("ul"); div.appendChild(ul); div.classList.add("section-bullets"); }
+                ul.appendChild(this.inline(document.createElement("li"), line.replace(bullet, "")));
+                p = null;
+            } else {
+                if (!p) { p = document.createElement("p"); div.appendChild(p); }
+                else p.appendChild(document.createElement("br"));
+                this.inline(p, line);
+                ul = null;
+            }
         });
-        div.appendChild(p);
         return div;
     }
 

@@ -20,9 +20,10 @@ SHARED_RULES = """STRICT RULES:
 9. Use section type "steps" for sequential procedures
 10. Use section type "alert" for deadlines, warnings, and must-do rules
 11. Use section type "paragraph" for narrative explanations
-12. Keep each paragraph under 150 words; keep bullets/steps under 8 items per section
-13. When stating a specific rule, eligibility criterion, or deadline, quote the exact phrase from context in double quotes
-14. If USER FORMAT REQUIREMENTS are specified above, they override any default section-type suggestions in the examples below"""
+12. Keep each paragraph under 150 words. Never put a list inside a paragraph: two or more items always go in "bullets", "steps" or "table". When the user asks for all items, include every item; there is no item limit
+13. When each item has two or more attributes (e.g. topics and hours, question ID and marks), use one "table" with one row per item
+14. When stating a specific rule, eligibility criterion, or deadline, quote the exact phrase from context in double quotes
+15. If USER FORMAT REQUIREMENTS are specified above, they override any default section-type suggestions in the examples below"""
 
 
 # Intent-specific JSON prompts
@@ -366,6 +367,44 @@ If term not found:
 Return ONLY valid JSON. No other text."""
 
 
+LISTING_PROMPT = """You are an academic assistant for NMIMS University.
+
+{shared_rules}
+
+EXTRA RULES FOR LISTS OF UNITS, TOPICS OR EXAM QUESTIONS:
+- The CONTEXT holds every matching item, one per entry. Include EVERY item, in the order given. Do not skip or merge items.
+- If the user asks for several attributes per item (topics, hours, marks, CO, unit), use a "table" with one row per item.
+- Otherwise use "bullets", one item per bullet.
+- When mapping questions to syllabus units, match each question's content against the SYLLABUS Unit entries. If a question could fit more than one unit, or the match is weak, append " (uncertain)" to that row's unit cell.
+- Use "paragraph" only for a one-sentence summary; never for the list itself.
+
+CONTEXT:
+{context}
+
+QUESTION: {query}
+
+Return JSON exactly like this:
+
+{{
+  "intent": "listing",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
+  "sections": [
+    {{
+      "heading": null,
+      "type": "table",
+      "headers": ["<column>", "<column>"],
+      "rows": [["<value from the context>", "<value from the context>"]]
+    }}
+  ],
+  "footer": null,
+  "confidence": "high",
+  "fallback": null
+}}
+
+Return ONLY valid JSON. No other text."""
+
+
 DOCUMENT_OVERVIEW_PROMPT = """You are a faculty information assistant for NMIMS University.
 
 {shared_rules}
@@ -499,6 +538,7 @@ INTENT_PROMPTS = {
     "form_help": PROCEDURE_PROMPT,
     "definition": DEFINITION_PROMPT,
     "document_overview": DOCUMENT_OVERVIEW_PROMPT,
+    "listing": LISTING_PROMPT,
     "salary_benefits": SALARY_BENEFITS_PROMPT,
     "department_list": DEPARTMENT_LIST_PROMPT,
     "general": GENERAL_PROMPT,

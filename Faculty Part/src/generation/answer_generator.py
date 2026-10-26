@@ -563,6 +563,10 @@ class AnswerGenerator:
             items = getattr(section, 'items', None)
             if items and isinstance(items, list):
                 sentences.extend(items)
+            rows = getattr(section, 'rows', None)
+            if rows and isinstance(rows, list):
+                # Tables count too; otherwise a table-only answer looks empty
+                sentences.extend(" ".join(str(c or "") for c in row) for row in rows)
         return [s.strip() for s in sentences if len(s.strip()) > 10]
 
     def _normalize_text(self, text: str) -> List[str]:

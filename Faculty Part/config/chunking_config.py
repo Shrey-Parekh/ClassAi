@@ -55,6 +55,7 @@ INTENT_CHUNK_LIMITS = {
     "eligibility": 15,     # Policy sections with conditions
     "salary_benefits": 15, # Salary/benefits sections
     "document_overview": 30, # Enumerations, e.g. every form in the compendium
+    "listing": 40,         # Every unit / exam question of a course
     "form_details": 15,    # One form's template and instructions
     "general": 20,         # Broad context for general queries
 }

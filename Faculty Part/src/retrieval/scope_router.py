@@ -116,6 +116,14 @@ class ScopeRouter:
             role = "student"
             scope = "student"
         
+        # Whole-document questions about course material ("all units", "every
+        # question mapped to CO-2") need every matching chunk, which similarity
+        # search cannot guarantee. Answer those from metadata instead.
+        if scope in ("student", "both"):
+            structured = self._structured_student_lookup(self._expand_abbreviations(query))
+            if structured:
+                return structured
+
         # Route based on scope
         if scope == "student":
             return self._retrieve_student_only(query, top_k)
@@ -137,18 +145,6 @@ class ScopeRouter:
         if expanded_query != query:
             self.logger.info(f"[EXPAND] '{query}' -> '{expanded_query}'")
             query = expanded_query
-        
-        # Check if this is a "list all units" type query
-        list_all_pattern = self._detect_list_all_query(query)
-        
-        if list_all_pattern:
-            # Use metadata filtering for comprehensive listing
-            self.logger.info(f"[RETRIEVE] Detected list-all query, using metadata filtering")
-            return self._retrieve_by_metadata_filter(
-                course_name=list_all_pattern['course_name'],
-                chunk_type='syllabus_unit',
-                collection='student'
-            )
         
         # For student queries, increase top_k for better coverage of course content
         # Student queries often ask for "all units", "all topics", etc.
@@ -333,6 +329,110 @@ class ScopeRouter:
         
         return expanded
     
+    def _structured_student_lookup(self, query: str) -> Optional[Dict[str, Any]]:
+        """Metadata-based answers for exam-paper and full-syllabus questions, or None."""
+        import re
+
+        q = query.lower()
+        course = self._detect_course(q)
+        if not course:
+            return None
+
+        co_match = re.search(r"\bco-?\s?(\d+)\b", q)
+        about_questions = re.search(r"\bquestions?\b|\bq\d", q)
+        wants_all = re.search(r"\b(all|every|each|list|which|mapping|map|maps|mapped)\b", q)
+        if about_questions and (co_match or wants_all):
+            co = f"CO-{co_match.group(1)}" if co_match else None
+            with_units = bool(re.search(r"\bunits?\b", q))
+            self.logger.info(f"[STRUCTURED] Question paper lookup: course={course} co={co} units={with_units}")
+            result = self._question_paper_chunks(course, co, with_units)
+            if result:
+                return result
+
+        if self._detect_list_all_query(query):
+            self.logger.info(f"[STRUCTURED] Syllabus unit listing: course={course}")
+            return self._retrieve_by_metadata_filter(
+                course_name=course, chunk_type='syllabus_unit', collection='student'
+            )
+        return None
+
+    def _detect_course(self, query_lower: str) -> Optional[str]:
+        """Course name mentioned in the query, normalised to the indexed name."""
+        import re
+        course_name_map = {
+            'machine learning': 'Machine Learning',
+            'ml': 'Machine Learning',
+            'cyber security': 'Cyber Security',
+            'distributed computing': 'Distributed Computing',
+            'computer vision': 'Computer Vision',
+            'human computer interaction': 'Human Computer Interaction',
+            'hci': 'Human Computer Interaction',
+            'biometrics': 'Biometrics',
+            'microservices': 'Microservices and Architecture',
+            'software quality': 'Software Quality Assurance',
+            'interpersonal skills': 'Interpersonal Skills',
+        }
+        match = re.search(r'\b(' + '|'.join(course_name_map) + r')\b', query_lower)
+        return course_name_map[match.group(1)] if match else None
+
+    def _question_paper_chunks(self, course: str, co: Optional[str], with_units: bool) -> Optional[Dict[str, Any]]:
+        """
+        Every question from the course's paper (optionally only one CO), in paper
+        order, as compact one-question chunks; plus the syllabus units when the
+        question asks to map questions to units.
+        """
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        client = self.student_pipeline.vector_db.client
+        must = [
+            FieldCondition(key='metadata.subject', match=MatchValue(value=course)),
+            FieldCondition(key='metadata.doc_type', match=MatchValue(value='question_paper')),
+        ]
+        if co:
+            must.append(FieldCondition(key='metadata.course_outcome', match=MatchValue(value=co)))
+        points, _ = client.scroll(self.student_collection_name, scroll_filter=Filter(must=must),
+                                  limit=100, with_payload=True, with_vectors=False)
+        if not points:
+            return None
+
+        def order(p):
+            m = p.payload.get("metadata", {})
+            return (int(m.get("question_number") or 99), str(m.get("question_part") or ""))
+
+        chunks = []
+        for p in sorted(points, key=order):
+            m = p.payload.get("metadata", {})
+            body = " ".join((p.payload.get("page_content") or "").split())[:400]
+            header = f"{m.get('question_id')} [{m.get('course_outcome')}; {m.get('marks')} marks; {m.get('bloom_level')}]"
+            chunks.append({"chunk_id": p.id, "text": f"{header}: {body}", "score": 1.0,
+                           "metadata": {**m, "source_collection": "student"}})
+
+        if with_units:
+            units, _ = client.scroll(self.student_collection_name, limit=50, with_payload=True, with_vectors=False,
+                                     scroll_filter=Filter(must=[
+                                         FieldCondition(key='metadata.course_name', match=MatchValue(value=course)),
+                                         FieldCondition(key='metadata.chunk_type', match=MatchValue(value='syllabus_unit')),
+                                     ]))
+            for u in sorted(units, key=lambda x: int(x.payload.get("metadata", {}).get("unit_number") or 99)):
+                m = u.payload.get("metadata", {})
+                body = " ".join((u.payload.get("page_content") or "").split())[:500]
+                chunks.append({"chunk_id": u.id, "text": f"SYLLABUS Unit {m.get('unit_number')}: {body}",
+                               "score": 1.0, "metadata": {**m, "source_collection": "student"}})
+
+        self.logger.info(f"[STRUCTURED] {len(chunks)} chunks for {course} (co={co}, units={with_units})")
+        return {
+            "chunks": chunks,
+            "intent": "listing",
+            "domain": "academic",
+            "entities": [course],
+            "format_preference": None,
+            "metadata": {
+                "retrieval_path": "question_paper_filter",
+                "collections_queried": ["student"],
+                "filter_applied": {"subject": course, "course_outcome": co, "with_units": with_units},
+            },
+        }
+
     def _detect_list_all_query(self, query: str) -> Optional[Dict[str, str]]:
         """
         Detect if query is asking for a comprehensive list (e.g., "list all units").
