@@ -5,6 +5,28 @@
  */
 
 class ResponseRenderer {
+    /**
+     * Append text to el, turning the model's **bold** markdown into <strong>.
+     * Text is only ever set through text nodes, so this stays XSS-safe.
+     */
+    inline(el, text) {
+        String(text ?? "").split(/\*\*(.+?)\*\*/g).forEach((part, i) => {
+            if (!part) return;
+            if (i % 2) {
+                const b = document.createElement("strong");
+                b.textContent = part;
+                el.appendChild(b);
+            } else {
+                el.appendChild(document.createTextNode(part));
+            }
+        });
+        return el;
+    }
+
+    plain(text) {
+        return String(text ?? "").replace(/\*\*(.+?)\*\*/g, "$1");
+    }
+
     render(structured, sources = []) {
         if (structured.confidence === "none" || structured.fallback) {
             return this.renderFallback(structured.fallback);
@@ -16,14 +38,14 @@ class ResponseRenderer {
         if (structured.title) {
             const h = document.createElement("h2");
             h.className = "response-title";
-            h.textContent = structured.title;
+            h.textContent = this.plain(structured.title);
             container.appendChild(h);
         }
 
         if (structured.subtitle) {
             const p = document.createElement("p");
             p.className = "response-subtitle";
-            p.textContent = structured.subtitle;
+            this.inline(p, structured.subtitle);
             container.appendChild(p);
         }
 
@@ -91,13 +113,13 @@ class ResponseRenderer {
         if (section.heading) {
             const h = document.createElement("h3");
             h.className = "section-heading";
-            h.textContent = section.heading;
+            h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
         const p = document.createElement("p");
         const text = section.content || "";
         text.split("\n").forEach((line, i, arr) => {
-            p.appendChild(document.createTextNode(line));
+            this.inline(p, line);
             if (i < arr.length - 1) p.appendChild(document.createElement("br"));
         });
         div.appendChild(p);
@@ -110,13 +132,13 @@ class ResponseRenderer {
         if (section.heading) {
             const h = document.createElement("h3");
             h.className = "section-heading";
-            h.textContent = section.heading;
+            h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
         const ul = document.createElement("ul");
         (section.items || []).forEach(item => {
             const li = document.createElement("li");
-            li.textContent = item;
+            this.inline(li, item);
             ul.appendChild(li);
         });
         div.appendChild(ul);
@@ -129,13 +151,13 @@ class ResponseRenderer {
         if (section.heading) {
             const h = document.createElement("h3");
             h.className = "section-heading";
-            h.textContent = section.heading;
+            h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
         const ol = document.createElement("ol");
         (section.items || []).forEach(item => {
             const li = document.createElement("li");
-            li.textContent = item;
+            this.inline(li, item);
             ol.appendChild(li);
         });
         div.appendChild(ol);
@@ -148,7 +170,7 @@ class ResponseRenderer {
         if (section.heading) {
             const h = document.createElement("h3");
             h.className = "section-heading";
-            h.textContent = section.heading;
+            h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
         
@@ -176,7 +198,7 @@ class ResponseRenderer {
             const tr = document.createElement("tr");
             row.forEach(cell => {
                 const td = document.createElement("td");
-                td.textContent = cell ?? "";
+                this.inline(td, cell);
                 tr.appendChild(td);
             });
             tbody.appendChild(tr);
@@ -195,11 +217,11 @@ class ResponseRenderer {
         if (section.heading) {
             const h = document.createElement("h3");
             h.className = "section-heading";
-            h.textContent = section.heading;
+            h.textContent = this.plain(section.heading);
             div.appendChild(h);
         }
         const p = document.createElement("p");
-        p.textContent = section.content || "";
+        this.inline(p, section.content);
         div.appendChild(p);
         return div;
     }

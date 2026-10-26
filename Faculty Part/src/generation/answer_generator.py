@@ -292,16 +292,7 @@ class AnswerGenerator:
         
         # Auto-generate footer from source documents if not provided by LLM (G19: prefer metadata title)
         if not structured.footer:
-            source_docs = set()
-            for chunk in chunks_to_use:
-                meta = chunk.get("metadata", {})
-                # Prefer human-readable title from metadata.json, fall back to cleaned filename
-                title = meta.get("title", "")
-                if not title:
-                    doc_name = meta.get("document_name", "")
-                    title = doc_name.replace(".pdf", "").replace(".json", "").replace("_", " ")
-                if title:
-                    source_docs.add(title)
+            source_docs = {self._doc_info(chunk)[1] for chunk in chunks_to_use} - {"Unknown document"}
             if source_docs:
                 structured.footer = "Based on: " + ", ".join(sorted(source_docs))
 
@@ -635,6 +626,25 @@ class AnswerGenerator:
 
         return "\n\n---\n\n".join(context_parts)
     
+    @staticmethod
+    def _doc_info(chunk: Dict[str, Any]):
+        """
+        Flat metadata and a readable document title for a chunk.
+
+        Faculty chunks carry flat metadata with a "title". Student chunks come from
+        LangChain, whose payload nests everything under "metadata" and names the
+        file in "source", e.g. "Machine_Learning_Exam_Paper.md".
+        """
+        meta = chunk.get("metadata") or {}
+        if isinstance(meta.get("metadata"), dict):
+            meta = {**meta, **meta["metadata"]}
+        title = meta.get("title") or ""
+        if not title:
+            name = meta.get("document_name") or meta.get("source") or meta.get("filepath") or ""
+            title = re.sub(r"\.(pdf|md|json|txt)$", "", os.path.basename(str(name)), flags=re.IGNORECASE)
+            title = title.replace("_", " ").strip()
+        return meta, title or "Unknown document"
+
     def _extract_sources(self, chunks: List[Dict[str, Any]]) -> List[Dict[str, str]]:
         """
         Extract source document information from chunks.
@@ -642,32 +652,12 @@ class AnswerGenerator:
         """
         sources = []
         seen_docs = set()
-        
+
         for chunk in chunks:
-            metadata = chunk.get("metadata", {})
-            
-            # Try multiple possible ID keys
-            # Faculty chunks: doc_id
-            # Student chunks: source, filepath, or generate from source
-            doc_id = (
-                metadata.get("doc_id") or
-                metadata.get("source") or
-                metadata.get("filepath") or
-                metadata.get("subject", "unknown")
-            )
-            
+            metadata, title = self._doc_info(chunk)
+            doc_id = metadata.get("doc_id") or metadata.get("source") or metadata.get("filepath") or title
+
             if doc_id and doc_id not in seen_docs:
-                # Try multiple possible title keys
-                # Faculty chunks: title
-                # Student chunks: subject, course_name, source
-                title = (
-                    metadata.get("title") or
-                    metadata.get("subject") or
-                    metadata.get("course_name") or
-                    metadata.get("source") or
-                    "Unknown Document"
-                )
-                
                 sources.append({
                     "doc_id": doc_id,
                     "title": title,

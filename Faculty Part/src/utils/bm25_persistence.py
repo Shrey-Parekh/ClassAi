@@ -149,7 +149,7 @@ class BM25PersistenceManager:
         """Calculate checksum for corpus and IDs — hashes every id and first 64 tokens."""
         h = hashlib.sha256()
         for cid, tokens in zip(ids, corpus):
-            h.update(cid.encode())
+            h.update(str(cid).encode())  # faculty ids are ints, student ids are UUID strings
             h.update(b"\0")
             h.update((" ".join(tokens[:64])).encode())
             h.update(b"\n")

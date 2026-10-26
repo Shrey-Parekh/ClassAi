@@ -214,7 +214,15 @@ class RetrievalPipeline:
             }
             for result in reranked_results
         ]
-        
+
+        # "List all forms": reranking favours individual form pages, so the
+        # compendium's table of contents (the one chunk naming every form)
+        # can be crowded out. Always lead with it.
+        if understanding.intent == "document_overview" and re.search(r"\bforms?\b", query, re.IGNORECASE):
+            toc = self._form_index_chunks()
+            toc_ids = {c["chunk_id"] for c in toc}
+            chunks = toc + [c for c in chunks if c["chunk_id"] not in toc_ids]
+
         return {
             "chunks": chunks,
             "intent": understanding.intent,
@@ -264,6 +272,25 @@ Write only the sentence, nothing else."""
         # Embed the hypothetical description
         return self.embedding_model.embed(hypothetical.strip())
     
+    def _form_index_chunks(self) -> List[Dict[str, Any]]:
+        """Chunks that list every form (the compendium's table of contents)."""
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+        try:
+            points, _ = self.vector_db.client.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(must=[FieldCondition(key="chunk_type", match=MatchValue(value="form_toc"))]),
+                limit=5,
+                with_payload=True,
+                with_vectors=False
+            )
+        except Exception as e:
+            self.logger.warning("Form index lookup failed: %s", e)
+            return []
+        return [
+            {"chunk_id": p.id, "text": p.payload.get("content", ""), "score": 1.0, "metadata": p.payload}
+            for p in points
+        ]
+
     def _attempt_direct_name_match(self, entity_name: str) -> List[Dict[str, Any]]:
         """
         Attempt direct metadata filter match for faculty name queries.
