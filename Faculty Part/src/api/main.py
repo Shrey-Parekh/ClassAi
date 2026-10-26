@@ -288,7 +288,7 @@ async def signout(req: Request):
     return {"status": "signed_out"}
 
 
-CONDENSE_PROMPT = """Rewrite the follow-up question as a standalone question that can be understood without the conversation. Keep names, form codes, course names and any formatting request (table, bullets, brief, detailed). If it is already standalone, return it unchanged.
+CONDENSE_PROMPT = """Rewrite the follow-up question as a standalone question that can be understood without the conversation. Replace vague references such as "it", "that", "this form" or "what about X" with the full subject from the conversation (for example "what about earned leave?" after a question about casual leave days becomes "How many days of earned leave do I get?"). Keep names, form codes, course names and any formatting request (table, bullets, brief, detailed). If it is already standalone, return it unchanged.
 
 Conversation:
 {history}
@@ -322,7 +322,7 @@ async def _standalone_query(query: str, session_id: Optional[str]) -> str:
     try:
         async with llm_semaphore:
             rewritten = await asyncio.to_thread(
-                llm_client.generate, prompt, max_tokens=120, temperature=0.0
+                llm_client.generate, prompt, max_tokens=400, temperature=0.0
             )
     except Exception as e:
         print(f"[CONDENSE] Failed, using original query: {e}")

@@ -38,18 +38,18 @@ QUESTION: {query}
 Example response:
 {{
   "intent": "person_lookup",
-  "title": "Dr. John Smith",
-  "subtitle": "Computer Science · john.smith@nmims.edu",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "About",
       "type": "paragraph",
-      "content": "Dr. Smith is an Associate Professor specializing in machine learning and neural networks."
+      "content": "<text taken from the context>"
     }},
     {{
       "heading": "Research Interests",
       "type": "bullets",
-      "items": ["Machine Learning", "AI", "Data Science"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }}
   ],
   "footer": null,
@@ -84,13 +84,13 @@ Using the context above, return your answer as JSON using EXACTLY this structure
 
 {{
   "intent": "topic_search",
-  "title": "Faculty researching Machine Learning",
-  "subtitle": "3 faculty members found",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
-      "heading": "Dr. John Smith · Computer Science",
+      "heading": "<name · department>",
       "type": "paragraph",
-      "content": "Specializes in neural networks. Email: john.smith@nmims.edu"
+      "content": "<text taken from the context>"
     }}
   ],
   "footer": null,
@@ -124,28 +124,23 @@ QUESTION: {query}
 Example response:
 {{
   "intent": "procedure",
-  "title": "Seed Grant Application Process",
-  "subtitle": "How to apply for research seed grants",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "Steps",
       "type": "steps",
-      "items": [
-        "Submit proposal to Research Office",
-        "Wait for review committee evaluation",
-        "Attend presentation if shortlisted",
-        "Receive approval notification"
-      ]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }},
     {{
       "heading": "Required Documents",
       "type": "bullets",
-      "items": ["Research proposal", "Budget breakdown", "CV"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }},
     {{
       "heading": "Important",
       "type": "alert",
-      "content": "Applications must be submitted by March 31st.",
+      "content": "<text taken from the context>",
       "severity": "warning"
     }}
   ],
@@ -157,13 +152,13 @@ Example response:
 Example for form query without field details:
 {{
   "intent": "procedure",
-  "title": "Form CL-7 Information",
-  "subtitle": "Casual Leave Application",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": null,
       "type": "paragraph",
-      "content": "Form CL-7 is required for casual leave applications. For the actual form and filling instructions, contact HR directly or check the forms repository."
+      "content": "<text taken from the context>"
     }}
   ],
   "footer": "Contact HR for the form template and detailed instructions.",
@@ -198,18 +193,18 @@ Using the context above, return your answer as JSON using EXACTLY this structure
 
 {{
   "intent": "eligibility",
-  "title": "Sabbatical Leave Eligibility",
-  "subtitle": "Faculty are eligible after 6 years of service",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "Policy Rule",
       "type": "paragraph",
-      "content": "Faculty may apply after 6 years of continuous service."
+      "content": "<text taken from the context>"
     }},
     {{
       "heading": "Conditions",
       "type": "bullets",
-      "items": ["6 years of service", "No disciplinary actions", "Research proposal required"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }}
   ],
   "footer": "Please confirm with HR directly.",
@@ -251,18 +246,18 @@ Return JSON using this structure:
 
 {{
   "intent": "form_details",
-  "title": "HR-LA-01 - Leave Application",
-  "subtitle": "Section A: applicant details",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "Purpose",
       "type": "paragraph",
-      "content": "Used to apply for any type of leave."
+      "content": "<text taken from the context>"
     }},
     {{
       "heading": "Section A — Applicant Details",
       "type": "bullets",
-      "items": ["Employee Name", "Employee ID", "Department", "Designation"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }}
   ],
   "footer": null,
@@ -297,13 +292,13 @@ Using the context above, return your answer as JSON using EXACTLY this structure
 
 {{
   "intent": "general",
-  "title": "Faculty Leave Policy",
+  "title": "<short title for this answer>",
   "subtitle": null,
   "sections": [
     {{
       "heading": null,
       "type": "paragraph",
-      "content": "Faculty are entitled to 30 days of annual leave per year."
+      "content": "<text taken from the context>"
     }}
   ],
   "footer": null,
@@ -338,18 +333,18 @@ Return a definition response. Lead with a one-sentence definition, then add scop
 
 {{
   "intent": "definition",
-  "title": "Sabbatical Leave",
+  "title": "<short title for this answer>",
   "subtitle": null,
   "sections": [
     {{
       "heading": null,
       "type": "paragraph",
-      "content": "Sabbatical leave is a period of paid leave granted to faculty for research, writing, or professional development."
+      "content": "<text taken from the context>"
     }},
     {{
       "heading": "Applicability",
       "type": "bullets",
-      "items": ["Permanent faculty only", "After 6 years of continuous service"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }}
   ],
   "footer": null,
@@ -391,16 +386,13 @@ Return JSON exactly like this:
 
 {{
   "intent": "document_overview",
-  "title": "Faculty Application Forms",
-  "subtitle": "Form codes found in the compendium",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "Form Codes",
       "type": "bullets",
-      "items": [
-        "HR-LA-01 — Leave Application",
-        "HR-CO-01 — Consultancy Form"
-      ]
+      "items": ["<FORM-CODE> — <form name from the context>", "<FORM-CODE> — <form name from the context>"]
     }}
   ],
   "footer": null,
@@ -435,17 +427,14 @@ Return salary/benefits information. Use a table when comparing components, bulle
 
 {{
   "intent": "salary_benefits",
-  "title": "Faculty Salary Components",
+  "title": "<short title for this answer>",
   "subtitle": null,
   "sections": [
     {{
       "heading": "Components",
       "type": "table",
       "headers": ["Component", "Details"],
-      "rows": [
-        ["Basic Pay", "As per pay scale"],
-        ["HRA", "30% of basic pay"]
-      ]
+      "rows": [["<value from the context>", "<value from the context>"]]
     }}
   ],
   "footer": null,
@@ -480,13 +469,13 @@ QUESTION: {query}
 
 {{
   "intent": "department_list",
-  "title": "Computer Science Department Faculty",
-  "subtitle": "Faculty members found",
+  "title": "<short title for this answer>",
+  "subtitle": "<one-line summary, or null>",
   "sections": [
     {{
       "heading": "Faculty",
       "type": "bullets",
-      "items": ["Dr. A — Professor, Machine Learning", "Dr. B — Associate Professor, Databases"]
+      "items": ["<item taken from the context>", "<item taken from the context>"]
     }}
   ],
   "footer": null,

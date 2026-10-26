@@ -33,7 +33,7 @@ class LLMClient:
         self.temperature = temperature
         
         if self.provider == "groq":
-            self.model = model or os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+            self.model = model or os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
             self.api_key = (os.getenv("GROQ_API_KEY") or "").strip()
             if not self.api_key:
                 raise ValueError("GROQ_API_KEY is not set. Add it to Faculty Part/.env")
@@ -131,6 +131,9 @@ class LLMClient:
         }
         if format == "json":
             payload["response_format"] = {"type": "json_object"}
+        if self.model.startswith("openai/gpt-oss"):
+            # Reasoning tokens count against max_completion_tokens; keep them short
+            payload["reasoning_effort"] = "low"
 
         for attempt in range(max_retries + 1):
             try:

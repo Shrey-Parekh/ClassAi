@@ -215,10 +215,11 @@ class RetrievalPipeline:
             for result in reranked_results
         ]
 
-        # "List all forms": reranking favours individual form pages, so the
-        # compendium's table of contents (the one chunk naming every form)
-        # can be crowded out. Always lead with it.
-        if understanding.intent == "document_overview" and re.search(r"\bforms?\b", query, re.IGNORECASE):
+        # The compendium's table of contents is the one chunk that names every
+        # form with its purpose. Reranking favours individual form pages and can
+        # crowd it out, so lead with it for form listings and single-form questions.
+        if understanding.intent == "form_details" or (
+                understanding.intent == "document_overview" and re.search(r"\bforms?\b", query, re.IGNORECASE)):
             toc = self._form_index_chunks()
             toc_ids = {c["chunk_id"] for c in toc}
             chunks = toc + [c for c in chunks if c["chunk_id"] not in toc_ids]

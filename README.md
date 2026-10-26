@@ -20,7 +20,7 @@ search, sign-in and the web UI. Answers are written by a language model on
 3. **Retrieval.** Dense vector search and BM25 run in parallel. Results are
    merged with reciprocal rank fusion and then reranked with
    `BAAI/bge-reranker-v2-m3`.
-4. **Generation.** The top chunks go to the LLM (`llama-3.3-70b-versatile` on
+4. **Generation.** The top chunks go to the LLM (`openai/gpt-oss-120b` on
    Groq by default). The LLM returns a structured answer with sources, streamed to the
    browser over Server-Sent Events.
 
@@ -161,7 +161,7 @@ Runtime settings live in `Faculty Part/.env`:
 | Variable                  | Default                  | Notes                         |
 |---------------------------|--------------------------|-------------------------------|
 | `LLM_PROVIDER`            | `groq`                   | `groq`, `ollama` or `gemini`  |
-| `LLM_MODEL`               | `llama-3.3-70b-versatile`| Any model listed on Groq      |
+| `LLM_MODEL`               | `openai/gpt-oss-120b`    | Any model listed on Groq      |
 | `GROQ_API_KEY`            |                          | Required for Groq             |
 | `OLLAMA_BASE_URL`         | `http://localhost:11434` |                               |
 | `GEMINI_API_KEY`          |                          | Only when using Gemini        |
