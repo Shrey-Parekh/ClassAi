@@ -19,8 +19,8 @@
     --warn:         #d9a441;
     --danger:       #ef7b6b;
 
-    --font-body: 'General Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-    --font-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Mono', monospace;
+    --font-body: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, 'Cascadia Mono', monospace;
 
     /* Shape: 6px on controls, 8px on the few bordered areas. No shadows. */
     --r-control: 6px;
