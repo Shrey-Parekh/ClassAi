@@ -146,7 +146,7 @@
     line-height: 1.5;
 }
 .seg-demo span { padding: 1px 10px; border-radius: 999px; color: var(--ink-3); }
-.seg-demo .is-on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(20, 26, 46, .12); }
+.seg-demo .is-on { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(0, 0, 0, .4); }
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .footer { border-top: 1px solid var(--line); }
